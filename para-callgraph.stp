@@ -1,0 +1,34 @@
+#!/usr/bin/env stap
+function trace(entry_p, extra) {
+  printf("%s%s%s %s\n",
+         thread_indent (entry_p),
+         (entry_p>0?"->":"<-"),
+         ppfunc (),
+         extra)
+}
+
+probe process("/usr/local/pgsql/bin/postgres").function("ExecutorStart").call   
+{
+    printf("%s arg1: %p, arg2: %d\n", ppfunc(), u64_arg(1), int_arg(2))
+    trace(1, $$parms) 
+}
+probe process("/usr/local/pgsql/bin/postgres").function("ExecutorStart").return { 
+    trace(-1, $$return) 
+}
+
+probe process("/usr/local/pgsql/bin/postgres").function("ExplainOnePlan").call   
+{ 
+    printf("%s arg1: %p, arg2: %p, arg3: %p\n", ppfunc(), u64_arg(1), u64_arg(2), u64_arg(3))
+    trace(1, $$parms) 
+}
+probe process("/usr/local/pgsql/bin/postgres").function("ExplainOnePlan").return { 
+    trace(-1, $$return) 
+}
+probe process("/usr/local/pgsql/bin/postgres").function("ExecutorFinish").call   
+{ 
+    printf("%p\n", u64_arg(1))
+    trace(1, $$parms) 
+}
+probe process("/usr/local/pgsql/bin/postgres").function("ExecutorFinish").return { 
+    trace(-1, $$return) 
+}
