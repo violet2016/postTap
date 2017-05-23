@@ -1,0 +1,29 @@
+#!/usr/bin/env stap
+probe process("/usr/local/pgsql/bin/postgres").function("ExecutorStart").call   
+{
+    printd("|", pid(), ppfunc(), ctime())
+}
+probe process("/usr/local/pgsql/bin/postgres").function("ExplainOnePlan").call   
+{ 
+#    printf("%s %s arg1: %p, arg2: %p, arg3: %p\n", ctime(), ppfunc(), u64_arg(1), u64_arg(2), u64_arg(3))
+}
+probe process("/usr/local/pgsql/bin/postgres").function("ExecutorFinish").call 
+{ 
+    printd("|", pid(), ppfunc(), ctime())
+}
+probe process("/usr/local/pgsql/bin/postgres").function("CreateQueryDesc").call   
+{
+    sourceText = pointer_arg(2)
+    if (sourceText != 0) {
+    printd("|", pid(), ppfunc(), kernel_string(sourceText))
+    }
+}
+probe process("/usr/local/pgsql/bin/postgres").function("InitPostgres").call   
+{
+    dbname = pointer_arg(1)
+    username = pointer_arg(3)
+    if (dbname != 0 && username != 0) {
+        printf("%d %s: %s %s\n", pid(), ppfunc(), kernel_string(dbname), kernel_string(username))
+    }
+}
+
