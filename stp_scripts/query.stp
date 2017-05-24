@@ -1,21 +1,18 @@
 #!/usr/bin/env stap
 probe process("/usr/local/pgsql/bin/postgres").function("ExecutorStart").call   
 {
-    printd("|", pid(), ppfunc(), ctime())
-}
-probe process("/usr/local/pgsql/bin/postgres").function("ExplainOnePlan").call   
-{ 
-#    printf("%s %s arg1: %p, arg2: %p, arg3: %p\n", ctime(), ppfunc(), u64_arg(1), u64_arg(2), u64_arg(3))
+    printdln("|", pid(), ppfunc(), "ctime", ctime())
 }
 probe process("/usr/local/pgsql/bin/postgres").function("ExecutorFinish").call 
 { 
-    printd("|", pid(), ppfunc(), ctime())
+    printdln("|", pid(), ppfunc(), "ctime", ctime())
 }
 probe process("/usr/local/pgsql/bin/postgres").function("CreateQueryDesc").call   
 {
+    printdln("|", pid(), ppfunc(), "var", "MyDatabaseId", @var("MyDatabaseId"))
     sourceText = pointer_arg(2)
     if (sourceText != 0) {
-    printd("|", pid(), ppfunc(), kernel_string(sourceText))
+        printdln("|", pid(), ppfunc(), "var", "arg_2", kernel_string(sourceText))
     }
 }
 probe process("/usr/local/pgsql/bin/postgres").function("InitPostgres").call   
@@ -27,3 +24,7 @@ probe process("/usr/local/pgsql/bin/postgres").function("InitPostgres").call
     }
 }
 
+probe process("/usr/local/pgsql/bin/postgres").function("get_database_name").call   
+{
+    printf("%d %s %d\n", pid(), ppfunc(), u64_arg(1))
+}
