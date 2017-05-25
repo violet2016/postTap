@@ -1,18 +1,18 @@
 #!/usr/bin/env stap
 probe process("/usr/local/pgsql/bin/postgres").function("ExecutorStart").call   
 {
-    printdln("|", pid(), ppfunc())
+    printdln("|", pid(), ppid(), ppfunc())
 }
 probe process("/usr/local/pgsql/bin/postgres").function("ExecutorFinish").call 
 { 
-    printdln("|", pid(), ppfunc())
+    printdln("|", pid(), ppid(), ppfunc())
 }
 probe process("/usr/local/pgsql/bin/postgres").function("CreateQueryDesc").call   
 {
-    printdln("|", pid(), ppfunc())
+    printdln("|", pid(), ppid(), ppfunc())
 }
 probe process("/usr/local/pgsql/bin/postgres").function("StatementCancelHandler").call   
 {
-    printdln("|", pid(), ppfunc())
+    printdln("|", pid(), ppid(), ppfunc())
 }
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 
+	"kanas/database"
 	"strings"
 
 	"github.com/streadway/amqp"
@@ -69,6 +70,16 @@ type QueryInfo struct {
 
 var queries = map[int]QueryInfo{}
 var qstatus = map[int]int{}
+var db *database.ActiveRecord
+
+func init() {
+	db = new(database.ActiveRecord)
+	err := db.Connect("postgres", "user=vcheng dbname=template1 sslmode=disable")
+	if err != nil {
+		panic(err)
+	}
+	getQueryInfo(0)
+}
 
 const (
 	submit = iota
@@ -85,6 +96,22 @@ func setStatus(pid int, status int) {
 		fmt.Println(qstatus[pid])
 	}
 }
+func getStatus(pid int) string {
+	stat, ok := qstatus[pid]
+	if !ok {
+		return "unknown"
+	}
+	switch stat {
+	case submit:
+		return "submit"
+	case start:
+		return "start"
+	case finish:
+		return "finish"
+	}
+	return "unknown"
+}
+
 func process(msg []byte) {
 	smsg := string(msg)
 	fields := strings.Split(smsg, "|")
@@ -95,7 +122,16 @@ func process(msg []byte) {
 	if pid == os.Getpid() {
 		return
 	}
-	funcName := fields[1]
+
+	ppid, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return
+	}
+	if ppid == os.Getpid() {
+		return
+	}
+
+	funcName := fields[2]
 
 	switch funcName {
 	case "ExecutorStart":
@@ -108,12 +144,29 @@ func process(msg []byte) {
 	if qstatus[pid] == submit {
 		query := getQueryInfo(pid)
 		queries[pid] = query
+	} else {
+		query := queries[pid]
+		query.status = getStatus(pid)
 	}
-
+	update(pid)
 }
 
 func getQueryInfo(pid int) QueryInfo {
 	query := QueryInfo{pid: pid}
+	db.CleanTokens().Select("datname, usename, query, state").From("pg_stat_activity").Where(fmt.Sprintf("pid = %d", pid)).And("coalesce(datname, '') <> ''")
+	rows, err := db.GetRows()
+	if err == nil && len(rows) > 0 {
+		query.dbname = rows[0]["datname"].(string)
+		query.username = rows[0]["usename"].(string)
+		query.queryText = rows[0]["query"].(string)
+		query.status = rows[0]["state"].(string)
+	} else {
+		fmt.Print(err)
+	}
 
 	return query
+}
+
+func update(pid int) {
+	fmt.Println(queries[pid])
 }

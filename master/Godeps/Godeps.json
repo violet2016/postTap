@@ -1,0 +1,28 @@
+{
+	"ImportPath": "postTap/master",
+	"GoVersion": "go1.8",
+	"GodepVersion": "v79",
+	"Deps": [
+		{
+			"ImportPath": "github.com/apcera/gssapi",
+			"Comment": "edge_test-2.7.2",
+			"Rev": "5fb4217df13b8e6878046fe1e5c10e560e1b86dc"
+		},
+		{
+			"ImportPath": "github.com/streadway/amqp",
+			"Rev": "dfe15e36048539f4cda41f240b27a5ca25b9cd46"
+		},
+		{
+			"ImportPath": "kanas/database",
+			"Rev": "2f7978f9ca9f21043cddd144b441914eb55c485c"
+		},
+		{
+			"ImportPath": "kanas/pq",
+			"Rev": "2f7978f9ca9f21043cddd144b441914eb55c485c"
+		},
+		{
+			"ImportPath": "kanas/pq/oid",
+			"Rev": "2f7978f9ca9f21043cddd144b441914eb55c485c"
+		}
+	]
+}
