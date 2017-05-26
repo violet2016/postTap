@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 
 	"kanas/database"
@@ -19,7 +18,7 @@ func failOnError(err error, msg string) {
 }
 
 func main() {
-	conn, err := amqp.Dial("amqp://kraken:guest@10.152.10.149:7777/kraken_vhost")
+	conn, err := amqp.Dial("amqp://kraken:guest@172.17.0.4:7777/kraken_vhost")
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
 
@@ -71,19 +70,25 @@ type QueryInfo struct {
 var queries = map[int]QueryInfo{}
 var qstatus = map[int]int{}
 var db *database.ActiveRecord
+var currentPID int
 
 func init() {
 	db = new(database.ActiveRecord)
-	err := db.Connect("postgres", "user=vcheng dbname=template1 sslmode=disable")
+	err := db.Connect("postgres", "user=gpadmin dbname=template1 sslmode=disable")
 	if err != nil {
 		panic(err)
 	}
-	getQueryInfo(0)
+	db.CleanTokens().Select("pg_backend_pid()")
+	row, err := db.GetRow()
+	if len(row) == 1 {
+		currentPID = int(row["pg_backend_pid"].(int64))
+	}
 }
 
 const (
 	submit = iota
 	start
+	cancel
 	finish
 )
 
@@ -93,7 +98,6 @@ func setStatus(pid int, status int) {
 	}
 	if qstatus[pid] <= status {
 		qstatus[pid] = status
-		fmt.Println(qstatus[pid])
 	}
 }
 func getStatus(pid int) string {
@@ -108,10 +112,15 @@ func getStatus(pid int) string {
 		return "start"
 	case finish:
 		return "finish"
+	case cancel:
+		return "cancel"
 	}
 	return "unknown"
 }
-
+func removeQuery(pid int) {
+	delete(queries, pid)
+	delete(qstatus, pid)
+}
 func process(msg []byte) {
 	smsg := string(msg)
 	fields := strings.Split(smsg, "|")
@@ -119,19 +128,11 @@ func process(msg []byte) {
 	if err != nil {
 		return
 	}
-	if pid == os.Getpid() {
+	if pid == currentPID {
 		return
 	}
 
-	ppid, err := strconv.Atoi(fields[0])
-	if err != nil {
-		return
-	}
-	if ppid == os.Getpid() {
-		return
-	}
-
-	funcName := fields[2]
+	funcName := fields[1]
 
 	switch funcName {
 	case "ExecutorStart":
@@ -140,15 +141,21 @@ func process(msg []byte) {
 		setStatus(pid, finish)
 	case "CreateQueryDesc":
 		setStatus(pid, submit)
+	case "StatementCancelHandler":
+		setStatus(pid, cancel)
 	}
+	var query QueryInfo
 	if qstatus[pid] == submit {
-		query := getQueryInfo(pid)
-		queries[pid] = query
+		query = getQueryInfo(pid)
 	} else {
-		query := queries[pid]
-		query.status = getStatus(pid)
+		query = queries[pid]
 	}
+	query.status = getStatus(pid)
+	queries[pid] = query
 	update(pid)
+	if qstatus[pid] == finish || qstatus[pid] == cancel {
+		removeQuery(pid)
+	}
 }
 
 func getQueryInfo(pid int) QueryInfo {
@@ -163,10 +170,9 @@ func getQueryInfo(pid int) QueryInfo {
 	} else {
 		fmt.Print(err)
 	}
-
 	return query
 }
 
 func update(pid int) {
-	fmt.Println(queries[pid])
+	fmt.Printf("%+v\n", queries[pid])
 }

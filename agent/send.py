@@ -4,6 +4,7 @@ import subprocess
 
 
 def send_message(message=''):
+        print message
         connection = pika.BlockingConnection(pika.connection.URLParameters(
         "amqp://kraken:guest@10.152.10.149:7777/kraken_vhost"))
         channel = connection.channel()
