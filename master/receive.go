@@ -174,5 +174,5 @@ func getQueryInfo(pid int) QueryInfo {
 }
 
 func update(pid int) {
-	fmt.Printf("%+v\n", queries[pid])
+	log.Printf("%+v\n", queries[pid])
 }
