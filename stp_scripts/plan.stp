@@ -1,0 +1,12 @@
+#!/usr/bin/env stap
+probe process("/usr/local/pgsql/bin/postgres").function("ExplainNode").call   
+{
+    plan_state = long_arg(1)
+    plan_type = kernel_pointer(plan_state)
+    plan_address = kernel_pointer(plan_state+8)
+    left = kernel_pointer(plan_state+7*8)
+    right = kernel_pointer(plan_state+8*8)
+    print_ubacktrace()
+    printf("type: %p plan: %p, left: %p, right: %p\n", plan_type, plan_address, left, right)
+}
+
