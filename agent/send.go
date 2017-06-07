@@ -18,7 +18,7 @@ func failOnError(err error, msg string) {
 
 // SendtoMQ send message to mq
 func SendtoMQ(message []byte) {
-	conn, err := amqp.Dial("amqp://kraken:guest@172.17.0.4:7777/kraken_vhost")
+	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672")
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
 

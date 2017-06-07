@@ -1,8 +1,13 @@
 #!/usr/bin/env stap
+function parse_planstate:string (planstate:long) {
+    return sprintf("type:%d,addr:%p,plan:%p,left:%p,right:%p", kernel_int(planstate), planstate, kernel_long(planstate+8), kernel_long(planstate+56),kernel_long(planstate+64)) 
+}
+
 probe process("/usr/local/pgsql/bin/postgres").function("ExecutorStart").call   
 {
     printdln("|", pid(), ppfunc())
 }
+
 probe process("/usr/local/pgsql/bin/postgres").function("ExecutorFinish").call 
 { 
     printdln("|", pid(), ppfunc())
@@ -16,3 +21,8 @@ probe process("/usr/local/pgsql/bin/postgres").function("StatementCancelHandler"
     printdln("|", pid(), ppfunc())
 }
 
+probe process("/usr/local/pgsql/bin/postgres").function("ExecProcNode").call
+{
+    plan_state = long_arg(1)
+    printdln("|", pid(), ppfunc(), parse_planstate(plan_state))
+}
