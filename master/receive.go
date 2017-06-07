@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"postTap/master/pg"
 	"strconv"
 
 	"kanas/database"
 	"strings"
 
-	"./pg"
 	"github.com/streadway/amqp"
 )
 
@@ -61,25 +61,28 @@ func main() {
 	<-forever
 }
 
-type PlanState struct {
+type NodeStore struct {
 	address        uint64
-	NodeType       int    `json:"type id"`
-	NodeTypeString string `json:"type"`
 	planAddr       uint64
 	leftStateAddr  uint64
 	rightStateAddr uint64
+}
+type PlanState struct {
+	NodeType       int        `json:"type id"`
+	NodeTypeString string     `json:"type"`
 	LeftTree       *PlanState `json:"left"`
 	RightTree      *PlanState `json:"right"`
+	actualNode     *NodeStore
+	explainedNode  *NodeStore
 }
 
 type QueryInfo struct {
-	pid                int
-	queryText          string
-	dbname             string
-	username           string
-	status             string
-	explainedPlanState *PlanState
-	actualPlanState    *PlanState
+	pid       int
+	queryText string
+	dbname    string
+	username  string
+	status    string
+	planState *PlanState
 }
 
 var queries = map[int]QueryInfo{}
@@ -107,9 +110,10 @@ const (
 	finish
 )
 
-func parsePlanState(node string) *PlanState {
+func parsePlanState(node string, actual bool) *PlanState {
 	fields := strings.Split(node, ",")
 	res := new(PlanState)
+	pnodeStore := new(NodeStore)
 	var err error
 	for _, field := range fields {
 		keyval := strings.SplitN(field, ":", 2)
@@ -117,13 +121,13 @@ func parsePlanState(node string) *PlanState {
 		case "type":
 			res.NodeType, err = strconv.Atoi(keyval[1])
 		case "addr":
-			res.address, err = strconv.ParseUint(keyval[1], 0, 64)
+			pnodeStore.address, err = strconv.ParseUint(keyval[1], 0, 64)
 		case "plan":
-			res.planAddr, err = strconv.ParseUint(keyval[1], 0, 64)
+			pnodeStore.planAddr, err = strconv.ParseUint(keyval[1], 0, 64)
 		case "left":
-			res.leftStateAddr, err = strconv.ParseUint(keyval[1], 0, 64)
+			pnodeStore.leftStateAddr, err = strconv.ParseUint(keyval[1], 0, 64)
 		case "right":
-			res.rightStateAddr, err = strconv.ParseUint(keyval[1], 0, 64)
+			pnodeStore.rightStateAddr, err = strconv.ParseUint(keyval[1], 0, 64)
 		}
 		if err != nil {
 			log.Fatal(err)
@@ -133,34 +137,56 @@ func parsePlanState(node string) *PlanState {
 	if name, ok := pg.PlanStateString[res.NodeType]; ok {
 		res.NodeTypeString = name
 	}
+	if actual {
+		res.actualNode = pnodeStore
+	} else {
+		res.explainedNode = pnodeStore
+	}
 	return res
 }
 
-func insertIntoPlanState(ancestor *PlanState, child *PlanState) bool {
+func insertIntoPlanState(ancestor *PlanState, child *PlanState, actual bool) bool {
 	if ancestor == nil {
 		return false
 	}
-	if ancestor.LeftTree == nil && ancestor.leftStateAddr == child.address {
+	anode := ancestor.explainedNode
+	cnode := child.explainedNode
+	if actual {
+		anode = ancestor.actualNode
+		cnode = child.actualNode
+	}
+	if ancestor.LeftTree == nil && anode.leftStateAddr == cnode.address {
 		ancestor.LeftTree = child
 		return true
 	}
-	if ancestor.RightTree == nil && ancestor.rightStateAddr == child.address {
+	if ancestor.RightTree == nil && anode.rightStateAddr == cnode.address {
 		ancestor.RightTree = child
 		return true
 	}
-	if insertIntoPlanState(ancestor.LeftTree, child) {
+	if insertIntoPlanState(ancestor.LeftTree, child, actual) {
 		return true
 	}
-	return insertIntoPlanState(ancestor.RightTree, child)
+	return insertIntoPlanState(ancestor.RightTree, child, actual)
 
 }
 func setActualPlan(pid int, node string) {
-	state := parsePlanState(node)
+	state := parsePlanState(node, true)
 	if q, ok := queries[pid]; ok {
-		if q.actualPlanState == nil {
-			q.actualPlanState = state
+		if q.planState == nil {
+			q.planState = state
 		} else {
-			insertIntoPlanState(q.actualPlanState, state)
+			insertIntoPlanState(q.planState, state, true)
+		}
+		queries[pid] = q
+	}
+}
+func setExplainedPlan(pid int, node string) {
+	state := parsePlanState(node, false)
+	if q, ok := queries[pid]; ok {
+		if q.planState == nil {
+			q.planState = state
+		} else {
+			insertIntoPlanState(q.planState, state, false)
 		}
 		queries[pid] = q
 	}
@@ -201,11 +227,13 @@ func process(msg []byte) {
 	if err != nil {
 		return
 	}
-	if pid == currentPID {
+	funcName := fields[1]
+	if pid == currentPID && funcName != "ExplainNode" {
 		return
 	}
-
-	funcName := fields[1]
+	if pid != currentPID && funcName == "ExplainNode" {
+		return
+	}
 
 	switch funcName {
 	case "ExecutorStart":
@@ -218,6 +246,9 @@ func process(msg []byte) {
 		setStatus(pid, cancel)
 	case "ExecProcNode":
 		setActualPlan(pid, fields[2])
+		return
+	case "ExplainNode":
+		setExplainedPlan(pid, fields[2])
 		return
 	}
 	var query QueryInfo
@@ -236,8 +267,8 @@ func process(msg []byte) {
 }
 func printPlan(pid int) {
 	if q, ok := queries[pid]; ok {
-		fmt.Printf("%+v\n", q.actualPlanState)
-		bytes, err := json.MarshalIndent(q.actualPlanState, "", "\t")
+		fmt.Printf("%+v\n", q.planState)
+		bytes, err := json.MarshalIndent(q.planState, "", "\t")
 		if err != nil {
 			return
 		}
@@ -253,6 +284,7 @@ func getQueryInfo(pid int) QueryInfo {
 		query.username = rows[0]["usename"].(string)
 		query.queryText = rows[0]["query"].(string)
 		query.status = rows[0]["state"].(string)
+		db.CleanTokens().ExecSQL(fmt.Sprintf("explain %s", query.dbname))
 	} else {
 		fmt.Print(err)
 	}

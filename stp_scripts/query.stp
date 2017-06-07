@@ -24,5 +24,9 @@ probe process("/usr/local/pgsql/bin/postgres").function("StatementCancelHandler"
 probe process("/usr/local/pgsql/bin/postgres").function("ExecProcNode").call
 {
     plan_state = long_arg(1)
+    #filter seqscan
+    if(kernel_int(plan_state) == 209) {
+        return
+    }
     printdln("|", pid(), ppfunc(), parse_planstate(plan_state))
 }
