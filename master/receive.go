@@ -61,21 +61,6 @@ func main() {
 	<-forever
 }
 
-type NodeStore struct {
-	address        uint64
-	planAddr       uint64
-	leftStateAddr  uint64
-	rightStateAddr uint64
-}
-type PlanState struct {
-	NodeType       int        `json:"type id"`
-	NodeTypeString string     `json:"type"`
-	LeftTree       *PlanState `json:"left"`
-	RightTree      *PlanState `json:"right"`
-	actualNode     *NodeStore
-	explainedNode  *NodeStore
-}
-
 type QueryInfo struct {
 	pid       int
 	queryText string
@@ -191,6 +176,7 @@ func setExplainedPlan(pid int, node string) {
 		queries[pid] = q
 	}
 }
+
 func setStatus(pid int, status int) {
 	if _, ok := qstatus[pid]; !ok {
 		qstatus[pid] = 0
@@ -244,6 +230,8 @@ func process(msg []byte) {
 		setStatus(pid, submit)
 	case "StatementCancelHandler":
 		setStatus(pid, cancel)
+	case "ExecInitNode":
+		setInitPlan(pid, fields[2])
 	case "ExecProcNode":
 		setActualPlan(pid, fields[2])
 		return
@@ -284,7 +272,7 @@ func getQueryInfo(pid int) QueryInfo {
 		query.username = rows[0]["usename"].(string)
 		query.queryText = rows[0]["query"].(string)
 		query.status = rows[0]["state"].(string)
-		db.CleanTokens().ExecSQL(fmt.Sprintf("explain %s", query.dbname))
+		//	db.CleanTokens().ExecSQL(fmt.Sprintf("explain %s", query.dbname))
 	} else {
 		fmt.Print(err)
 	}
