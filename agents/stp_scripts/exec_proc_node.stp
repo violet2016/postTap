@@ -1,0 +1,14 @@
+#!/usr/bin/env stap
+
+function parse_estate:string (estate:long) {
+    return sprintf("estate:%p,es_processed:%p", estate, user_long(estate+8)) 
+}
+
+
+probe process("/usr/local/pgsql/bin/postgres").function("ExecProcNode").call
+{
+    lpid = pid()
+    printdln("|", lpid, "ExecProcNode", parse_estate(estate))
+    exit()
+}
+

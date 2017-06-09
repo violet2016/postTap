@@ -1,0 +1,14 @@
+#!/usr/bin/env stap
+// A long existing stap script to get plan node when a query start
+
+function parse_plan:string (plan:long, estate:long) {
+    return sprintf("plantype:%d,plan:%p,plan_rows:%p,leftplan:%p,rightplan:%p,estate:%p", user_int(plan), plan, user_long(plan+24),user_long(plan+64), user_long(plan+72), estate) 
+}
+
+
+probe process("/usr/local/pgsql/bin/postgres").function("ExecInitNode").call
+{
+    plan = long_arg(1)
+    estate = long_arg(2)
+	printdln("|", pid(), ppfunc(), parse_plan(plan, estate))
+}

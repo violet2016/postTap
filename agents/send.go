@@ -50,7 +50,7 @@ func SendtoMQ(message []byte) {
 }
 
 func main() {
-	myCmd := exec.Command("stap", "../stp_scripts/query.stp")
+	myCmd := exec.Command("stap", "./stp_scripts/exec_init_node.stp")
 	cmdOut, _ := myCmd.StdoutPipe()
 	cmdErr, _ := myCmd.StderrPipe()
 
