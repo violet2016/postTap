@@ -43,8 +43,15 @@ const (
 )
 
 // PlanStateString is the map of enum and print strings
-var PlanStateString = map[int]string{
-	ResultState:  "Result",
-	SeqScanState: "Seq Scan",
-	LimitState:   "Limit",
+var planStateStringMap = map[int]string{
+	ResultState:   "Result",
+	SeqScanState:  "Seq Scan",
+	LimitState:    "Limit",
+	AggState:      "Aggregate",
+	NestLoopState: "Nested Loop",
+	MaterialState: "Materialize",
+}
+
+func GetNodeTypeString(typeCode int) string {
+	return planStateStringMap[typeCode]
 }
