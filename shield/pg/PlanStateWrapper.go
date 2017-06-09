@@ -28,7 +28,7 @@ type PlanStateWrapper struct {
 	PlanRows       float64
 	Finished       bool
 	EsProcessed    uint64
-	AllNodeAddr    []uint64
+	AllNodeAddrMap map[uint64]bool
 }
 
 func (ps *PlanStateWrapper) GeneratePlanState(plan map[string]string) uint64 {
@@ -123,7 +123,10 @@ func ParsePlanString(p string) map[string]string {
 }
 
 func (ps *PlanStateWrapper) InitPlanStateWrapperFromExecInitPlan(msg string) {
-	ps.AllNodeAddr = append(ps.AllNodeAddr, ps.GeneratePlanState(ParsePlanString(msg)))
+	if ps.AllNodeAddrMap == nil {
+		ps.AllNodeAddrMap = map[uint64]bool{}
+	}
+	ps.AllNodeAddrMap[ps.GeneratePlanState(ParsePlanString(msg))] = false
 }
 
 func (ps *PlanStateWrapper) GenExecProcNodeScript() ([]byte, error) {
@@ -137,10 +140,16 @@ func (ps *PlanStateWrapper) GenExecProcNodeScript() ([]byte, error) {
 		return []byte{}, err
 	}
 	codelines := []byte{}
-	for _, addr := range ps.AllNodeAddr {
-		codeline := []byte(fmt.Sprintf("\tprintdln(\"|\", lpid, \"ExecProcNode\", parse_estate(%d))\n", addr))
-		codelines = append(codelines, codeline...)
+	for addr, fini := range ps.AllNodeAddrMap {
+		if !fini {
+			codeline := []byte(fmt.Sprintf("\tprintdln(\"|\", lpid, \"ExecProcNode\", parse_estate(%d))\n", addr))
+			codelines = append(codelines, codeline...)
+		}
+
 	}
-	replaceall := bytes.Replace(bfile, []byte("PLACEHOLDER"), codelines, -1)
-	return replaceall, nil
+	if len(codelines) > 0 {
+		replaceall := bytes.Replace(bfile, []byte("PLACEHOLDER"), codelines, -1)
+		return replaceall, nil
+	}
+	return []byte{}, nil
 }
