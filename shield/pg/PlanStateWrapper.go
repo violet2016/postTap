@@ -169,7 +169,7 @@ func (ps *PlanStateWrapper) GenExecProcNodeScript() ([]byte, error) {
 	replacemap := bytes.Replace(bfile, []byte("PLACEHOLDER_MAP"), maplines, -1)
 	codelines := ps.TranverseGenSTAP(PrintInstrument)
 	if ps.allInstrReady {
-		codelines = append(codelines, []byte("\t\texit()\n")...)
+		codelines = append(codelines, []byte("\t\tprintdln(\"|\", pid(), \"EndInstrument\")\n\t\texit()\n")...)
 	}
 	replaceall := bytes.Replace(replacemap, []byte("PLACEHOLDER_ADDR"), codelines, -1)
 	//All instrument address is found

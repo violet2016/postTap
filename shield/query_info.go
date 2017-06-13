@@ -59,6 +59,7 @@ func (qi *QueryInfo) StatusChanged(stat int) {
 		go qi.StartPolling()
 	case finish:
 	case cancel:
+		go qi.EndPolling()
 	}
 }
 
@@ -67,14 +68,14 @@ func (qi *QueryInfo) StartPolling() {
 		<-time.After(15 * time.Second)
 
 		if qi.statusCode == start && qi.planStateRoot != nil {
-			command := new(communicator.Command)
+			command := new(communicator.CommandMsg)
 			command.CommandName = "RUN"
 			command.Pid = qi.pid
 			script, err := qi.planStateRoot.GenExecProcNodeScript()
 			if err == nil {
 				command.Script = script
 				msg, _ := json.Marshal(command)
-				log.Println("send command")
+				log.Println("Send Run Command")
 				queryComm.Send("command", msg)
 			}
 		} else {
@@ -84,6 +85,13 @@ func (qi *QueryInfo) StartPolling() {
 }
 
 func (qi *QueryInfo) EndPolling() {
+	command := new(communicator.CommandMsg)
+	command.CommandName = "STOP"
+	command.Pid = qi.pid
+
+	msg, _ := json.Marshal(command)
+	log.Println("Send Stop Command")
+	queryComm.Send("command", msg)
 
 }
 func (qi *QueryInfo) PrintPlan() {

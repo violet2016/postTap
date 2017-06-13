@@ -49,6 +49,12 @@ func (qs *QueryMsgProcessor) UpdateInstrument(pid int, instru string) {
 		qi.UpdateNode(instru)
 	}
 }
+
+func (qs *QueryMsgProcessor) Export(pid int) {
+	if qi, ok := qs.Queries[pid]; ok {
+		qi.PrintPlan()
+	}
+}
 func (qs *QueryMsgProcessor) GetQueryDetails(pid int) error {
 	qs.backendDB.db.CleanTokens().Select("datname, usename, query, state").From("pg_stat_activity").Where(fmt.Sprintf("pid = %d", pid)).And("coalesce(datname, '') <> ''")
 	rows, err := qs.backendDB.db.GetRows()
@@ -104,6 +110,8 @@ func (qs *QueryMsgProcessor) Process(msg []byte) error {
 		return nil
 	case "GetInstrument":
 		qs.UpdateInstrument(pid, fields[2])
+	case "EndInstrument":
+		qs.Export(pid)
 	}
 	return nil
 }

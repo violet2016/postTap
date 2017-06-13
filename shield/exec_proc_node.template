@@ -39,6 +39,7 @@ PLACEHOLDER_ADDR
 		next
 	}
     if (node_count <= 0) {
+        printdln("|", pid(), "EndInstrument")
         exit()
     }
     
