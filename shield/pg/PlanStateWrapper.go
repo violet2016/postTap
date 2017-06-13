@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math"
+	"os"
 	"path"
-	"runtime"
 	"strconv"
-	"strings"
 )
 
 // NodeStore: node address information
@@ -24,16 +22,38 @@ type PlanStateWrapper struct {
 	LeftTree       *PlanStateWrapper `json:"left"`
 	RightTree      *PlanStateWrapper `json:"right"`
 	Plan           *NodeStore
-	Estate         *NodeStore
+	Instrument     uint64
 	PlanRows       float64
-	Finished       bool
-	EsProcessed    uint64
-	AllNodeAddrMap map[uint64]bool
+	TupleCount     float64
+	allInstrReady  bool
 }
 
+type PlanFunction func(*PlanStateWrapper) interface{}
+
+func PrintInstrument(ps *PlanStateWrapper) interface{} {
+	if ps.Plan.Address == 0 || ps.Instrument == 0 {
+		return []byte{}
+	}
+	codeline := []byte(fmt.Sprintf("\t\tprintdln(\"|\", pid(), \"GetInstrument\", parse_instrument(%d, %d))\n", ps.Plan.Address, ps.Instrument))
+	return codeline
+}
+
+func PrintPlan(ps *PlanStateWrapper) interface{} {
+	if ps.Instrument != 0 || ps.Plan.Address == 0 {
+		return []byte{}
+	}
+	codeline := []byte(fmt.Sprintf(`
+	else if (plannode == %d) {
+		instr = user_long(planstate+24)
+		printdln("|", pid(), "GetInstrument", parse_instrument(plannode,instr))
+	}
+	`, ps.Plan.Address))
+	return codeline
+}
+
+// GeneratePlanState Initilize the planstate and some info we can get during plan
 func (ps *PlanStateWrapper) GeneratePlanState(plan map[string]string) uint64 {
 	pnodeStore := new(NodeStore)
-	enodeStore := new(NodeStore)
 	var err error
 	for key, val := range plan {
 		switch key {
@@ -41,8 +61,6 @@ func (ps *PlanStateWrapper) GeneratePlanState(plan map[string]string) uint64 {
 			ps.PlanNodeType, err = strconv.Atoi(val)
 		case "plan":
 			pnodeStore.Address, err = strconv.ParseUint(val, 0, 64)
-		case "estate":
-			enodeStore.Address, err = strconv.ParseUint(val, 0, 64)
 		case "leftplan":
 			pnodeStore.leftAddr, err = strconv.ParseUint(val, 0, 64)
 		case "rightplan":
@@ -58,19 +76,9 @@ func (ps *PlanStateWrapper) GeneratePlanState(plan map[string]string) uint64 {
 		ps.NodeTypeString = GetNodeTypeString(ps.PlanNodeType)
 	}
 
-	ps.Estate = enodeStore
 	ps.Plan = pnodeStore
+	ps.allInstrReady = false
 	return ps.Plan.Address
-}
-
-func ConvertHexToFloat64(val string) (float64, error) {
-	n, err := strconv.ParseUint(val, 16, 64)
-	if err != nil {
-		return 0, err
-	}
-	n2 := uint64(n)
-	return math.Float64frombits(n2), nil
-
 }
 
 func (ps *PlanStateWrapper) IsLeftChild(child *PlanStateWrapper) bool {
@@ -112,44 +120,76 @@ func (ps *PlanStateWrapper) InsertNewNode(node *PlanStateWrapper) bool {
 	return false
 }
 
-func ParsePlanString(p string) map[string]string {
-	result := map[string]string{}
-	fields := strings.Split(p, ",")
-	for _, field := range fields {
-		keyval := strings.SplitN(field, ":", 2)
-		result[keyval[0]] = keyval[1]
+func (ps *PlanStateWrapper) FindNodeByAddr(addr uint64) *PlanStateWrapper {
+	if addr == 0 {
+		return nil
 	}
-	return result
+	if ps.Plan.Address == addr {
+		return ps
+	}
+	if leftRes := ps.LeftTree.FindNodeByAddr(addr); leftRes != nil {
+		return leftRes
+	}
+	return ps.RightTree.FindNodeByAddr(addr)
 }
 
 func (ps *PlanStateWrapper) InitPlanStateWrapperFromExecInitPlan(msg string) {
-	if ps.AllNodeAddrMap == nil {
-		ps.AllNodeAddrMap = map[uint64]bool{}
-	}
-	ps.AllNodeAddrMap[ps.GeneratePlanState(ParsePlanString(msg))] = false
+	ps.GeneratePlanState(ParsePlanString(msg))
 }
 
-func (ps *PlanStateWrapper) GenExecProcNodeScript() ([]byte, error) {
-	_, filename, _, ok := runtime.Caller(1)
-	if !ok {
-		return []byte{}, fmt.Errorf("Cannot open template")
+func (ps *PlanStateWrapper) TranverseGenSTAP(fn PlanFunction) []byte {
+	if ps == nil {
+		return []byte{}
 	}
-	filepath := path.Join(path.Dir(filename), "../exec_proc_node.template")
+	left := ps.LeftTree.TranverseGenSTAP(fn)
+	right := ps.RightTree.TranverseGenSTAP(fn)
+	local := fn(ps).([]byte)
+	result := append(local, left...)
+	result = append(result, right...)
+	return result
+}
+func (ps *PlanStateWrapper) GenExecProcNodeScript() ([]byte, error) {
+	if ps == nil {
+		return []byte{}, nil
+	}
+	if ps.allInstrReady {
+		return []byte{}, nil
+	}
+
+	ex, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	exPath := path.Dir(ex)
+	filepath := path.Join(exPath, "exec_proc_node.template")
+	log.Println(filepath)
 	bfile, err := ioutil.ReadFile(filepath)
 	if err != nil {
 		return []byte{}, err
 	}
-	codelines := []byte{}
-	for addr, fini := range ps.AllNodeAddrMap {
-		if !fini {
-			codeline := []byte(fmt.Sprintf("\tprintdln(\"|\", lpid, \"ExecProcNode\", parse_estate(%d))\n", addr))
-			codelines = append(codelines, codeline...)
-		}
-
+	codelines := ps.TranverseGenSTAP(PrintInstrument)
+	replaceaddr := bytes.Replace(bfile, []byte("PLACEHOLDER_ADDR"), codelines, -1)
+	planlines := ps.TranverseGenSTAP(PrintPlan)
+	//All instrument address is found
+	if len(planlines) == 0 {
+		ps.allInstrReady = true
 	}
-	if len(codelines) > 0 {
-		replaceall := bytes.Replace(bfile, []byte("PLACEHOLDER"), codelines, -1)
+	replaceall := bytes.Replace(replaceaddr, []byte("PLACEHOLDER_PLAN"), planlines, -1)
+	if len(codelines) > 0 || len(planlines) > 0 {
+		fmt.Println(string(replaceall))
 		return replaceall, nil
 	}
 	return []byte{}, nil
+}
+
+// UpdateInfo update Plannode info according a string map
+func (ps *PlanStateWrapper) UpdateInfo(info map[string]string) {
+	for key, val := range info {
+		switch key {
+		case "tuplecount":
+			ps.TupleCount, _ = ConvertHexToFloat64(val[2:])
+		case "instrument":
+			ps.Instrument, _ = strconv.ParseUint(val, 0, 64)
+		}
+	}
 }

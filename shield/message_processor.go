@@ -2,14 +2,13 @@ package main
 
 import (
 	"fmt"
-	"postTap/master/pg"
+	"log"
+
+	"postTap/shield/pg"
+
 	"strconv"
 	"strings"
 )
-
-type MessageProcessor interface {
-	Process(msg []byte) error
-}
 
 type QueryMsgProcessor struct {
 	backendDB *DBWrapper
@@ -32,13 +31,22 @@ func (qs *QueryMsgProcessor) UpdateStatus(pid int, stat int) {
 		if q.statusCode < stat {
 			q.statusCode = stat
 			q.status = GetStatusString(stat)
+			log.Println("query status:", q.status)
+			q.StatusChanged(stat)
 		}
 	} else {
 		qs.Queries[pid] = &QueryInfo{pid: pid, statusCode: stat, status: GetStatusString(stat)}
 	}
 	if stat == finish || stat == cancel {
-		qs.Queries[pid].PrintPlan()
+		//qs.Queries[pid].PrintPlan()
 		qs.DeleteQuery(pid)
+	}
+
+}
+
+func (qs *QueryMsgProcessor) UpdateInstrument(pid int, instru string) {
+	if qi, ok := qs.Queries[pid]; ok {
+		qi.UpdateNode(instru)
 	}
 }
 func (qs *QueryMsgProcessor) GetQueryDetails(pid int) error {
@@ -71,12 +79,12 @@ func (qs *QueryMsgProcessor) InitPlan(pid int, msg string) {
 
 }
 
-func (qs *QueryMsgProcessor) Process(msg []byte) (int, error) {
+func (qs *QueryMsgProcessor) Process(msg []byte) error {
 	smsg := string(msg)
 	fields := strings.Split(smsg, "|")
 	pid, err := strconv.Atoi(fields[0])
 	if err != nil {
-		return 0, fmt.Errorf("Unspported msg type: %s", smsg)
+		return fmt.Errorf("Unspported msg type: %s", smsg)
 	}
 	funcName := fields[1]
 	switch funcName {
@@ -93,8 +101,9 @@ func (qs *QueryMsgProcessor) Process(msg []byte) (int, error) {
 			qs.InitPlan(pid, fields[2])
 		}
 	case "ExecProcNode":
-	case "ExplainNode":
-		return 0, nil
+		return nil
+	case "GetInstrument":
+		qs.UpdateInstrument(pid, fields[2])
 	}
-	return 0, nil
+	return nil
 }

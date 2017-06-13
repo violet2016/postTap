@@ -1,15 +1,24 @@
 #!/usr/bin/env stap
 
-function parse_estate:string (estate:long) {
-    return sprintf("estate:%p,es_processed:%p", estate, user_long(estate+8)) 
+function parse_instrument:string (plannode:long, instr:long) {
+    if (instr != 0) {
+        return sprintf("plannode:%p,instrument:%p,tuplecount:%p", plannode, instr, user_long(instr+8)) 
+    }
+    return sprintf("instrument:%p", instr)
 }
-
+global not_printed = 1
 
 probe process("/usr/local/pgsql/bin/postgres").function("ExecProcNode").call
 {
-    lpid = pid()
-
-PLACEHOLDER
-    exit()
+    planstate = long_arg(1)
+    plannode = user_long(planstate+8)
+    if (not_printed == 1) {
+PLACEHOLDER_ADDR
+        not_printed = 0
+    }
+    if (plannode == 0) {
+    }
+PLACEHOLDER_PLAN
+    
 }
 

@@ -3,14 +3,14 @@ package pg
 import "testing"
 
 func TestParsePlanString(t *testing.T) {
-	res := ParsePlanString("plantype:117,addr:0x1ae4630,left:0x0,right:0x0")
+	res := ParsePlanString("plantype:117,addr:0x1ae4630,leftplan:0x0,rightplan:0x0")
 	if res["plantype"] != "117" {
 		t.Error("address parse error")
 	}
 }
 func TestGeneratePlanState(t *testing.T) {
 	ps := new(PlanStateWrapper)
-	ps.InitPlanStateWrapperFromExecInitPlan("plantype:117,plan:0x1ae4630,plan_rows:0x408f400000000000,left:0x0,right:0x0,estate:0x121212")
+	ps.InitPlanStateWrapperFromExecInitPlan("plantype:117,plan:0x1ae4630,plan_rows:0x408f400000000000,leftplan:0x0,rightplan:0x0")
 	if ps.PlanNodeType != 117 {
 		t.Errorf("plan node type parse error %d", ps.PlanNodeType)
 	}
@@ -20,19 +20,14 @@ func TestGeneratePlanState(t *testing.T) {
 	if ps.PlanRows != 1000.0 {
 		t.Error("plan rows error")
 	}
-	if ps.Estate.Address != 1184274 {
-		t.Error("estate address error")
-	}
 }
-func TestAllAddr(t *testing.T) {
+func TestInstrument(t *testing.T) {
 	ps := new(PlanStateWrapper)
-	ps.InitPlanStateWrapperFromExecInitPlan("plantype:117,plan:0x1ae4630,plan_rows:0x408f400000000000,left:0x1234,right:0x0,estate:0x121212")
-	if ps.AllNodeAddrMap[28198448] != false {
-		t.Error("All node addr not correct")
-	}
-	ps.InitPlanStateWrapperFromExecInitPlan("plantype:117,plan:0x1234,plan_rows:0x408f400000000000,left:0x0,right:0x0,estate:0x11")
-	if ps.AllNodeAddrMap[4660] != false {
-		t.Error("All node addr not correct")
+	ps.InitPlanStateWrapperFromExecInitPlan("plantype:117,plan:0x1ae4630,plan_rows:0x408f400000000000,leftplan:0x1234,rightplan:0x0")
+
+	ps.InitPlanStateWrapperFromExecInitPlan("plantype:117,plan:0x1234,plan_rows:0x408f400000000000,leftplan:0x0,rightplan:0x0")
+	if ps.Instrument != 0 {
+		t.Error("Instrument addr correct")
 	}
 }
 func TestConvertHexToFloat64(t *testing.T) {
@@ -44,9 +39,10 @@ func TestConvertHexToFloat64(t *testing.T) {
 
 func TestExecProcNodeScript(t *testing.T) {
 	ps := new(PlanStateWrapper)
-	ps.AllNodeAddrMap = map[uint64]bool{}
-	ps.AllNodeAddrMap[18446744073709551615] = false
-	ps.AllNodeAddrMap[1234] = true
+	ps.InitPlanStateWrapperFromExecInitPlan("plantype:117,plan:0x1ae4630,plan_rows:0x408f400000000000,leftplan:0x1234,rightplan:0x0")
+	sub := new(PlanStateWrapper)
+	sub.InitPlanStateWrapperFromExecInitPlan("plantype:117,plan:0x1234,plan_rows:0x408f400000000000,leftplan:0x0,rightplan:0x0")
+	ps.InsertNewNode(sub)
 	_, err := ps.GenExecProcNodeScript()
 	if err != nil {
 		t.Error("error occurred:", err)

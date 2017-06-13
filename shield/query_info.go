@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"kanas/database"
-	"postTap/master/pg"
+	"log"
+	"postTap/communicator"
+	"postTap/shield/pg"
+	"strconv"
+	"time"
 )
 
 // Query status
@@ -33,6 +37,55 @@ func (qi *QueryInfo) UpdatePlanStateTree(node *pg.PlanStateWrapper) {
 	}
 }
 
+func (qi *QueryInfo) UpdateNode(msg string) {
+	info := pg.ParsePlanString(msg)
+	if plan, ok := info["plannode"]; ok {
+		addr, err := strconv.ParseUint(plan, 0, 64)
+		if err != nil {
+			return
+		}
+		qs := qi.planStateRoot.FindNodeByAddr(addr)
+		if qs == nil {
+			return
+		}
+		qs.UpdateInfo(info)
+	}
+}
+
+func (qi *QueryInfo) StatusChanged(stat int) {
+	switch stat {
+	case start:
+		log.Println("start polling ...")
+		go qi.StartPolling()
+	case finish:
+	case cancel:
+	}
+}
+
+func (qi *QueryInfo) StartPolling() {
+	for {
+		<-time.After(15 * time.Second)
+
+		if qi.statusCode == start && qi.planStateRoot != nil {
+			command := new(communicator.Command)
+			command.CommandName = "RUN"
+			command.Pid = qi.pid
+			script, err := qi.planStateRoot.GenExecProcNodeScript()
+			if err == nil {
+				command.Script = script
+				msg, _ := json.Marshal(command)
+				log.Println("send command")
+				queryComm.Send("command", msg)
+			}
+		} else {
+			return
+		}
+	}
+}
+
+func (qi *QueryInfo) EndPolling() {
+
+}
 func (qi *QueryInfo) PrintPlan() {
 	bytes, err := json.MarshalIndent(qi.planStateRoot, "", "\t")
 	if err != nil {
