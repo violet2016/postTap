@@ -7,18 +7,40 @@ function parse_instrument:string (plannode:long, instr:long) {
     return sprintf("instrument:%p", instr)
 }
 global not_printed = 1
+global map_addr_wait_hit
+global node_count = 0
+probe begin {
+    if (target() == 0) {
+        println("No PID specified.  Use -c or -x.  See man stap for more information.")
+        exit()
+    }
+    foreach ([a] in map_addr_wait_hit)
+        node_count ++
+
+PLACEHOLDER_MAP
+
+}
 
 probe process("/usr/local/pgsql/bin/postgres").function("ExecProcNode").call
 {
     planstate = long_arg(1)
     plannode = user_long(planstate+8)
     if (not_printed == 1) {
-PLACEHOLDER_ADDR
         not_printed = 0
+
+PLACEHOLDER_ADDR      
     }
-    if (plannode == 0) {
+
+    if (node_count > 0 && map_addr_wait_hit[plannode] == 1) {
+		instr = user_long(planstate+24)
+		printdln("|", pid(), "GetInstrument", parse_instrument(plannode,instr))
+		delete map_addr_wait_hit[plannode]
+        node_count --
+		next
+	}
+    if (node_count <= 0) {
+        exit()
     }
-PLACEHOLDER_PLAN
     
 }
 

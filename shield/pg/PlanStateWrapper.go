@@ -38,16 +38,11 @@ func PrintInstrument(ps *PlanStateWrapper) interface{} {
 	return codeline
 }
 
-func PrintPlan(ps *PlanStateWrapper) interface{} {
+func PrintMap(ps *PlanStateWrapper) interface{} {
 	if ps.Instrument != 0 || ps.Plan.Address == 0 {
 		return []byte{}
 	}
-	codeline := []byte(fmt.Sprintf(`
-	else if (plannode == %d) {
-		instr = user_long(planstate+24)
-		printdln("|", pid(), "GetInstrument", parse_instrument(plannode,instr))
-	}
-	`, ps.Plan.Address))
+	codeline := []byte(fmt.Sprintf("\tmap_addr_wait_hit[%d] = 1\n", ps.Plan.Address))
 	return codeline
 }
 
@@ -167,16 +162,19 @@ func (ps *PlanStateWrapper) GenExecProcNodeScript() ([]byte, error) {
 	if err != nil {
 		return []byte{}, err
 	}
-	codelines := ps.TranverseGenSTAP(PrintInstrument)
-	replaceaddr := bytes.Replace(bfile, []byte("PLACEHOLDER_ADDR"), codelines, -1)
-	planlines := ps.TranverseGenSTAP(PrintPlan)
-	//All instrument address is found
-	if len(planlines) == 0 {
+	maplines := ps.TranverseGenSTAP(PrintMap)
+	if len(maplines) == 0 {
 		ps.allInstrReady = true
 	}
-	replaceall := bytes.Replace(replaceaddr, []byte("PLACEHOLDER_PLAN"), planlines, -1)
-	if len(codelines) > 0 || len(planlines) > 0 {
-		fmt.Println(string(replaceall))
+	replacemap := bytes.Replace(bfile, []byte("PLACEHOLDER_MAP"), maplines, -1)
+	codelines := ps.TranverseGenSTAP(PrintInstrument)
+	if ps.allInstrReady {
+		codelines = append(codelines, []byte("\t\texit()\n")...)
+	}
+	replaceall := bytes.Replace(replacemap, []byte("PLACEHOLDER_ADDR"), codelines, -1)
+	//All instrument address is found
+
+	if len(codelines) > 0 || len(maplines) > 0 {
 		return replaceall, nil
 	}
 	return []byte{}, nil
