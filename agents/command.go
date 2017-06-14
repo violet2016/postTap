@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"os"
 )
 
@@ -14,21 +16,16 @@ type Command struct {
 }
 
 func (command *Command) SaveScript(stp *stap) {
-	var file *os.File
-	var err error
 	if _, err := os.Stat(stp.scriptPath); os.IsNotExist(err) {
-		file, err = os.Create(stp.scriptPath)
+		_, err = os.Create(stp.scriptPath)
 		if err != nil {
+			log.Printf("Error occurred during script opening: %s", err)
 			return
 		}
 
-	} else {
-		file, err = os.Open(stp.scriptPath)
 	}
-	if err != nil {
-		return
-	}
-	file.Write(command.Script)
+
+	ioutil.WriteFile(stp.scriptPath, command.Script, 0644)
 }
 
 func (command *Command) Process(msg []byte) error {
@@ -53,7 +50,7 @@ func (command *Command) GetStap() *stap {
 	if stp, ok := command.RunningStp[command.Pid]; ok {
 		return stp
 	}
-	stp := &stap{scriptPath: fmt.Sprintf("/tmp/%d.stp", command.Pid), pid: command.Pid, timeout: 5}
+	stp := &stap{scriptPath: fmt.Sprintf("/tmp/%d.stp", command.Pid), pid: command.Pid, timeout: 10}
 	command.RunningStp[command.Pid] = stp
 	return stp
 }

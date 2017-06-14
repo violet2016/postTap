@@ -8,6 +8,7 @@ import (
 	"postTap/communicator"
 	"postTap/shield/pg"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -27,10 +28,13 @@ type QueryInfo struct {
 	status        string
 	statusCode    int
 	planStateRoot *pg.PlanStateWrapper
+	rwlock        sync.RWMutex
 }
 
 func (qi *QueryInfo) UpdatePlanStateTree(node *pg.PlanStateWrapper) {
 	if qi.planStateRoot != nil {
+		qi.rwlock.Lock()
+		defer qi.rwlock.Unlock()
 		qi.planStateRoot.InsertNewNode(node)
 	} else {
 		qi.planStateRoot = node
@@ -38,6 +42,8 @@ func (qi *QueryInfo) UpdatePlanStateTree(node *pg.PlanStateWrapper) {
 }
 
 func (qi *QueryInfo) UpdateNode(msg string) {
+	qi.rwlock.Lock()
+	defer qi.rwlock.Unlock()
 	info := pg.ParsePlanString(msg)
 	if plan, ok := info["plannode"]; ok {
 		addr, err := strconv.ParseUint(plan, 0, 64)
@@ -55,7 +61,6 @@ func (qi *QueryInfo) UpdateNode(msg string) {
 func (qi *QueryInfo) StatusChanged(stat int) {
 	switch stat {
 	case start:
-		log.Println("start polling ...")
 		go qi.StartPolling()
 	case finish:
 	case cancel:
@@ -63,40 +68,71 @@ func (qi *QueryInfo) StatusChanged(stat int) {
 	}
 }
 
-func (qi *QueryInfo) StartPolling() {
-	for {
-		<-time.After(15 * time.Second)
-
-		if qi.statusCode == start && qi.planStateRoot != nil {
-			command := new(communicator.CommandMsg)
-			command.CommandName = "RUN"
-			command.Pid = qi.pid
-			script, err := qi.planStateRoot.GenExecProcNodeScript()
-			if err == nil {
-				command.Script = script
-				msg, _ := json.Marshal(command)
-				log.Println("Send Run Command")
-				queryComm.Send("command", msg)
-			}
-		} else {
-			return
-		}
+func (qi *QueryInfo) SendCommand(name string) error {
+	command := new(communicator.CommandMsg)
+	command.CommandName = "RUN"
+	command.Pid = qi.pid
+	commandQueue := new(communicator.AmqpComm)
+	if err := commandQueue.Connect("amqp://guest:guest@localhost:5672"); err != nil {
+		log.Fatalf("%s", err)
+		return err
 	}
+	defer commandQueue.Close()
+	qi.rwlock.RLock()
+	defer qi.rwlock.RUnlock()
+	if qi.statusCode == start && qi.planStateRoot != nil {
+		script, err := qi.planStateRoot.GenExecProcNodeScript()
+		if err == nil {
+			command.Script = script
+			msg, _ := json.Marshal(command)
+			log.Println("Send Run Command")
+
+			commandQueue.Send("command", msg)
+		}
+	} else {
+		return fmt.Errorf("Query already stopped")
+	}
+	return nil
+}
+func (qi *QueryInfo) StartPolling() {
+	ticker := time.NewTicker(30 * time.Second)
+	quit := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				if err := qi.SendCommand("RUN"); err != nil {
+					close(quit)
+				}
+			case <-quit:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
 }
 
 func (qi *QueryInfo) EndPolling() {
 	command := new(communicator.CommandMsg)
 	command.CommandName = "STOP"
 	command.Pid = qi.pid
-
+	commandQueue := new(communicator.AmqpComm)
+	if err := commandQueue.Connect("amqp://guest:guest@localhost:5672"); err != nil {
+		log.Fatalf("%s", err)
+		return
+	}
+	defer commandQueue.Close()
 	msg, _ := json.Marshal(command)
 	log.Println("Send Stop Command")
-	queryComm.Send("command", msg)
+	commandQueue.Send("command", msg)
 
 }
 func (qi *QueryInfo) PrintPlan() {
+	qi.rwlock.RLock()
+	defer qi.rwlock.RUnlock()
 	bytes, err := json.MarshalIndent(qi.planStateRoot, "", "\t")
 	if err != nil {
+		fmt.Println(err)
 		return
 	}
 	fmt.Println(string(bytes))

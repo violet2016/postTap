@@ -33,7 +33,6 @@ func TestProcessQuerySleep(t *testing.T) {
 	if q.planStateRoot.LeftTree == nil {
 		t.Error("left tree Plan is null")
 	}
-
 	msgInstru := []byte("96700|GetInstrument|plannode:0x1aea8b8,instrument:0x1111,tuplecount:0x408f400000000000")
 	qs.Process(msgInstru)
 	if q.planStateRoot.LeftTree.Instrument != 4369 {
@@ -45,4 +44,7 @@ func TestProcessQuerySleep(t *testing.T) {
 	if q.planStateRoot.LeftTree.TupleCount != 1000 {
 		t.Error("tuplecount not right")
 	}
+	//	qs.Export(96700)
+	msgEnd := []byte("96700|EndInstrument")
+	qs.Process(msgEnd)
 }

@@ -2,7 +2,7 @@
 
 function parse_instrument:string (plannode:long, instr:long) {
     if (instr != 0) {
-        return sprintf("plannode:%p,instrument:%p,tuplecount:%p", plannode, instr, user_long(instr+8)) 
+        return sprintf("plannode:%p,instrument:%p,tuplecount:%p", plannode, instr, user_long(instr+48)) 
     }
     return sprintf("instrument:%p", instr)
 }
@@ -14,11 +14,9 @@ probe begin {
         println("No PID specified.  Use -c or -x.  See man stap for more information.")
         exit()
     }
+PLACEHOLDER_MAP
     foreach ([a] in map_addr_wait_hit)
         node_count ++
-
-PLACEHOLDER_MAP
-
 }
 
 probe process("/usr/local/pgsql/bin/postgres").function("ExecProcNode").call

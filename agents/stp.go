@@ -6,7 +6,9 @@ import (
 	"io"
 	"log"
 	"os/exec"
+	"postTap/communicator"
 	"strconv"
+	"syscall"
 	"time"
 )
 
@@ -24,9 +26,13 @@ func (stp *stap) Run() {
 	}
 	arg = append(arg, stp.scriptPath)
 	stp.cmd = exec.Command("stap", arg...)
-	cmdOut, _ := stp.cmd.StdoutPipe()
+	stp.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmdStdout, _ := stp.cmd.StdoutPipe()
+	log.Printf("Monitoring stp %s running\n", stp.scriptPath)
+	go readPipeandSend(cmdStdout)
+
 	cmdErr, _ := stp.cmd.StderrPipe()
-	go readPipeandSend(cmdOut)
+
 	go readPipe(cmdErr, "Error: ")
 	stp.cmd.Start()
 	if stp.timeout > 0 {
@@ -36,6 +42,17 @@ func (stp *stap) Run() {
 				log.Fatal("failed to kill: ", err)
 			}
 			log.Println("process killed as timeout reached")
+			localComm := new(communicator.AmqpComm)
+			if err := localComm.Connect("amqp://guest:guest@localhost:5672"); err != nil {
+				log.Fatalf("%s", err)
+			}
+			defer localComm.Close()
+			msg := []byte(fmt.Sprintf("%d|EndInstrument", stp.pid))
+			if err := localComm.Send("probe", msg); err != nil {
+				log.Fatalf("Cannot send EndInstrument")
+			} else {
+				log.Println("Send ", string(msg))
+			}
 		}
 	} else {
 		var input string
@@ -47,10 +64,13 @@ func (stp *stap) Stop() {
 	if stp.cmd == nil {
 		return
 	}
-	if stp.cmd.ProcessState.Exited() {
+	if stp.cmd.ProcessState == nil || stp.cmd.ProcessState.Exited() {
 		return
 	}
-	if err := stp.cmd.Process.Kill(); err != nil {
+	pgid, err := syscall.Getpgid(stp.cmd.Process.Pid)
+	if err == nil {
+		syscall.Kill(-pgid, 15) // note the minus sign
+	} else {
 		log.Fatal("Fail to stop: ", err)
 	}
 }
@@ -68,17 +88,17 @@ func readPipe(reader io.Reader, prefix string) {
 }
 
 func readPipeandSend(reader io.Reader) {
-	if err := queryComm.Connect("amqp://guest:guest@localhost:5672"); err != nil {
+	localComm := new(communicator.AmqpComm)
+	if err := localComm.Connect("amqp://guest:guest@localhost:5672"); err != nil {
 		log.Fatalf("%s", err)
-		return
 	}
-	defer queryComm.Close()
+	defer localComm.Close()
 	r := bufio.NewReader(reader)
 	var line []byte
 	for true {
 		line, _, _ = r.ReadLine()
 		if line != nil {
-			queryComm.Send("probe", line)
+			localComm.Send("probe", line)
 		}
 	}
 }

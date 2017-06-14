@@ -116,7 +116,7 @@ func (ps *PlanStateWrapper) InsertNewNode(node *PlanStateWrapper) bool {
 }
 
 func (ps *PlanStateWrapper) FindNodeByAddr(addr uint64) *PlanStateWrapper {
-	if addr == 0 {
+	if ps == nil || addr == 0 {
 		return nil
 	}
 	if ps.Plan.Address == addr {
@@ -157,7 +157,6 @@ func (ps *PlanStateWrapper) GenExecProcNodeScript() ([]byte, error) {
 	}
 	exPath := path.Dir(ex)
 	filepath := path.Join(exPath, "exec_proc_node.template")
-	log.Println(filepath)
 	bfile, err := ioutil.ReadFile(filepath)
 	if err != nil {
 		return []byte{}, err

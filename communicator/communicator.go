@@ -93,7 +93,7 @@ func (comm *AmqpComm) Send(queue string, msg []byte) error {
 	if err != nil {
 		return err
 	}
-	log.Printf(" [x] Sent %s", msg)
+	//log.Printf(" [x] Sent %s", msg)
 	return nil
 }
 

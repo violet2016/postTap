@@ -52,6 +52,7 @@ func (qs *QueryMsgProcessor) UpdateInstrument(pid int, instru string) {
 
 func (qs *QueryMsgProcessor) Export(pid int) {
 	if qi, ok := qs.Queries[pid]; ok {
+		log.Println("Export")
 		qi.PrintPlan()
 	}
 }
@@ -88,12 +89,17 @@ func (qs *QueryMsgProcessor) InitPlan(pid int, msg string) {
 func (qs *QueryMsgProcessor) Process(msg []byte) error {
 	smsg := string(msg)
 	fields := strings.Split(smsg, "|")
+	if len(fields) < 2 {
+		return fmt.Errorf("Unspported msg type: %s", smsg)
+	}
 	pid, err := strconv.Atoi(fields[0])
 	if err != nil {
 		return fmt.Errorf("Unspported msg type: %s", smsg)
 	}
 	funcName := fields[1]
 	switch funcName {
+	case "EndInstrument":
+		qs.Export(pid)
 	case "ExecutorStart":
 		qs.UpdateStatus(pid, start)
 	case "ExecutorFinish":
@@ -109,9 +115,9 @@ func (qs *QueryMsgProcessor) Process(msg []byte) error {
 	case "ExecProcNode":
 		return nil
 	case "GetInstrument":
-		qs.UpdateInstrument(pid, fields[2])
-	case "EndInstrument":
-		qs.Export(pid)
+		if len(fields) > 2 {
+			qs.UpdateInstrument(pid, fields[2])
+		}
 	}
 	return nil
 }

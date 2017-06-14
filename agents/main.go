@@ -5,16 +5,16 @@ import (
 	"postTap/communicator"
 )
 
-var queryComm *communicator.AmqpComm
+var initNode *stap
 
 func init() {
-	queryComm = new(communicator.AmqpComm)
+	initNode = &stap{scriptPath: "./stp_scripts/exec_init_node.stp", pid: 0, timeout: 0}
 }
 
 func main() {
 
 	go WaitForCommand()
-	initNode := &stap{scriptPath: "./stp_scripts/exec_init_node.stp", pid: 0, timeout: 0}
+
 	initNode.Run()
 }
 
