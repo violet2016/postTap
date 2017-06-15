@@ -1,6 +1,10 @@
 package pg
 
-import "testing"
+import (
+	"os"
+	"path"
+	"testing"
+)
 
 func TestParsePlanString(t *testing.T) {
 	res := ParsePlanString("plantype:117,addr:0x1ae4630,leftplan:0x0,rightplan:0x0")
@@ -43,7 +47,10 @@ func TestExecProcNodeScript(t *testing.T) {
 	sub := new(PlanStateWrapper)
 	sub.InitPlanStateWrapperFromExecInitPlan("plantype:117,plan:0x1234,plan_rows:0x408f400000000000,leftplan:0x0,rightplan:0x0")
 	ps.InsertNewNode(sub)
-	_, err := ps.GenExecProcNodeScript()
+
+	gopath := os.Getenv("GOPATH")
+	f := path.Join(gopath, "src", "postTap/shield", "exec_proc_node.template")
+	_, err := ps.GenExecProcNodeScript(f)
 	if err != nil {
 		t.Error("error occurred:", err)
 	}

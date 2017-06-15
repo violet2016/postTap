@@ -18,6 +18,7 @@ type stap struct {
 	timeout    time.Duration
 	cmd        *exec.Cmd
 	quit       chan bool
+	status     int
 }
 
 func (stp *stap) Run() {
@@ -39,7 +40,7 @@ func (stp *stap) Run() {
 
 	go readPipe(cmdErr, "Error: ", stp.quit)
 	stp.cmd.Start()
-
+	stp.status = 1
 	if stp.timeout > 0 {
 		select {
 		case <-time.After(stp.timeout * time.Second):
@@ -62,16 +63,21 @@ func (stp *stap) Run() {
 
 func (stp *stap) Stop() {
 	log.Println("Stop process")
-	close(stp.quit)
 	if stp.cmd == nil || stp.cmd.Process == nil {
 		log.Println("cmd does not exist")
 		return
 	}
+	if stp.status == 1 {
+		close(stp.quit)
+	}
+
 	defer stp.cmd.Wait()
 	pgid, err := syscall.Getpgid(stp.cmd.Process.Pid)
 	if err == nil {
 		syscall.Kill(-pgid, 15) // note the minus sign
 		log.Println("terminate process")
+		stp.cmd = nil
+		stp.status = 0
 	} else {
 		log.Fatal("Failed to call kill process:", err)
 	}

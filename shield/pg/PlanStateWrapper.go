@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
-	"path"
 	"strconv"
 )
 
@@ -17,15 +15,17 @@ type NodeStore struct {
 	rightAddr uint64
 }
 type PlanStateWrapper struct {
-	PlanNodeType   int               `json:"type id"`
-	NodeTypeString string            `json:"type"`
-	LeftTree       *PlanStateWrapper `json:"left"`
-	RightTree      *PlanStateWrapper `json:"right"`
-	Plan           *NodeStore
-	Instrument     uint64
-	PlanRows       float64
-	TupleCount     float64
-	allInstrReady  bool
+	PlanNodeType       int                 `json:"type id"`
+	NodeTypeString     string              `json:"Node Type"`
+	ParentRelationship string              `json:"Parent Relationship,omitempty"`
+	Childrens          []*PlanStateWrapper `json:"Plans,omitempty"`
+	//	LeftTree           *PlanStateWrapper `json:"left"`
+	//	RightTree          *PlanStateWrapper `json:"right"`
+	Plan          *NodeStore `json:"-"`
+	Instrument    uint64     `json:"-"`
+	PlanRows      float64    `json:"Plan Rows"`
+	TupleCount    float64    `json:"Tuple Count"`
+	allInstrReady bool
 }
 
 type PlanFunction func(*PlanStateWrapper) interface{}
@@ -98,18 +98,20 @@ func (ps *PlanStateWrapper) InsertNewNode(node *PlanStateWrapper) bool {
 	if ps == nil {
 		return false
 	}
-	if ps.LeftTree == nil && ps.IsLeftChild(node) {
-		ps.LeftTree = node
+	if len(ps.Childrens) == 0 && ps.IsLeftChild(node) {
+		node.ParentRelationship = "Outer"
+		ps.Childrens = append(ps.Childrens, node)
 		return true
 	}
-	if ps.RightTree == nil && ps.IsRightChild(node) {
-		ps.RightTree = node
+	if len(ps.Childrens) == 1 && ps.IsRightChild(node) {
+		node.ParentRelationship = "Inner"
+		ps.Childrens = append(ps.Childrens, node)
 		return true
 	}
-	if ps.LeftTree != nil && ps.LeftTree.InsertNewNode(node) {
+	if len(ps.Childrens) == 1 && ps.Childrens[0].InsertNewNode(node) {
 		return true
 	}
-	if ps.RightTree != nil && ps.RightTree.InsertNewNode(node) {
+	if len(ps.Childrens) == 2 && ps.Childrens[1].InsertNewNode(node) {
 		return true
 	}
 	return false
@@ -122,10 +124,14 @@ func (ps *PlanStateWrapper) FindNodeByAddr(addr uint64) *PlanStateWrapper {
 	if ps.Plan.Address == addr {
 		return ps
 	}
-	if leftRes := ps.LeftTree.FindNodeByAddr(addr); leftRes != nil {
-		return leftRes
+	if len(ps.Childrens) > 0 {
+		if leftRes := ps.Childrens[0].FindNodeByAddr(addr); leftRes != nil {
+			return leftRes
+		} else if len(ps.Childrens) == 2 {
+			return ps.Childrens[1].FindNodeByAddr(addr)
+		}
 	}
-	return ps.RightTree.FindNodeByAddr(addr)
+	return nil
 }
 
 func (ps *PlanStateWrapper) InitPlanStateWrapperFromExecInitPlan(msg string) {
@@ -136,14 +142,13 @@ func (ps *PlanStateWrapper) TranverseGenSTAP(fn PlanFunction) []byte {
 	if ps == nil {
 		return []byte{}
 	}
-	left := ps.LeftTree.TranverseGenSTAP(fn)
-	right := ps.RightTree.TranverseGenSTAP(fn)
-	local := fn(ps).([]byte)
-	result := append(local, left...)
-	result = append(result, right...)
+	result := fn(ps).([]byte)
+	for _, child := range ps.Childrens {
+		result = append(result, child.TranverseGenSTAP(fn)...)
+	}
 	return result
 }
-func (ps *PlanStateWrapper) GenExecProcNodeScript() ([]byte, error) {
+func (ps *PlanStateWrapper) GenExecProcNodeScript(template string) ([]byte, error) {
 	if ps == nil {
 		return []byte{}, nil
 	}
@@ -151,13 +156,7 @@ func (ps *PlanStateWrapper) GenExecProcNodeScript() ([]byte, error) {
 		return []byte{}, nil
 	}
 
-	ex, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
-	exPath := path.Dir(ex)
-	filepath := path.Join(exPath, "exec_proc_node.template")
-	bfile, err := ioutil.ReadFile(filepath)
+	bfile, err := ioutil.ReadFile(template)
 	if err != nil {
 		return []byte{}, err
 	}

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"kanas/database"
 	"log"
+	"os"
+	"path"
 	"postTap/communicator"
 	"postTap/shield/pg"
 	"strconv"
@@ -80,8 +82,14 @@ func (qi *QueryInfo) SendCommand(name string) error {
 	defer commandQueue.Close()
 	qi.rwlock.RLock()
 	defer qi.rwlock.RUnlock()
+	ex, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	exPath := path.Dir(ex)
+	filepath := path.Join(exPath, "exec_proc_node.template")
 	if qi.statusCode == start && qi.planStateRoot != nil {
-		script, err := qi.planStateRoot.GenExecProcNodeScript()
+		script, err := qi.planStateRoot.GenExecProcNodeScript(filepath)
 		if err == nil {
 			command.Script = script
 			msg, _ := json.Marshal(command)
@@ -96,15 +104,15 @@ func (qi *QueryInfo) SendCommand(name string) error {
 }
 func (qi *QueryInfo) StartPolling() {
 	ticker := time.NewTicker(30 * time.Second)
-	quit := make(chan struct{})
+	quitpolling := make(chan struct{})
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
 				if err := qi.SendCommand("RUN"); err != nil {
-					close(quit)
+					close(quitpolling)
 				}
-			case <-quit:
+			case <-quitpolling:
 				ticker.Stop()
 				return
 			}
@@ -130,7 +138,7 @@ func (qi *QueryInfo) EndPolling() {
 func (qi *QueryInfo) PrintPlan() {
 	qi.rwlock.RLock()
 	defer qi.rwlock.RUnlock()
-	bytes, err := json.MarshalIndent(qi.planStateRoot, "", "\t")
+	bytes, err := json.MarshalIndent(qi.planStateRoot, "", "  ")
 	if err != nil {
 		fmt.Println(err)
 		return
