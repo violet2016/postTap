@@ -21,11 +21,15 @@ type PlanStateWrapper struct {
 	Childrens          []*PlanStateWrapper `json:"Plans,omitempty"`
 	//	LeftTree           *PlanStateWrapper `json:"left"`
 	//	RightTree          *PlanStateWrapper `json:"right"`
-	Plan          *NodeStore `json:"-"`
-	Instrument    uint64     `json:"-"`
-	PlanRows      float64    `json:"Plan Rows"`
-	TupleCount    float64    `json:"Tuple Count"`
-	allInstrReady bool
+	Plan       *NodeStore `json:"-"`
+	Instrument uint64     `json:"-"`
+	PlanRows   float64    `json:"Plan Rows"`
+	TupleCount float64    `json:"Tuple Count"`
+	Startup    float64
+	TotalTime  float64
+	NTuples    float64 `json:"Total Tuple Count"`
+	NLoops     float64
+	scriptGen  bool
 }
 
 type PlanFunction func(*PlanStateWrapper) interface{}
@@ -34,15 +38,7 @@ func PrintInstrument(ps *PlanStateWrapper) interface{} {
 	if ps.Plan.Address == 0 || ps.Instrument == 0 {
 		return []byte{}
 	}
-	codeline := []byte(fmt.Sprintf("\t\tprintdln(\"|\", pid(), \"GetInstrument\", parse_instrument(%d, %d))\n", ps.Plan.Address, ps.Instrument))
-	return codeline
-}
-
-func PrintMap(ps *PlanStateWrapper) interface{} {
-	if ps.Instrument != 0 || ps.Plan.Address == 0 {
-		return []byte{}
-	}
-	codeline := []byte(fmt.Sprintf("\tmap_addr_wait_hit[%d] = 1\n", ps.Plan.Address))
+	codeline := []byte(fmt.Sprintf("\tprintdln(\"|\", pid(), \"GetInstrument\", parse_instrument(%d, %d))\n", ps.Plan.Address, ps.Instrument))
 	return codeline
 }
 
@@ -72,7 +68,6 @@ func (ps *PlanStateWrapper) GeneratePlanState(plan map[string]string) uint64 {
 	}
 
 	ps.Plan = pnodeStore
-	ps.allInstrReady = false
 	return ps.Plan.Address
 }
 
@@ -149,30 +144,21 @@ func (ps *PlanStateWrapper) TranverseGenSTAP(fn PlanFunction) []byte {
 	return result
 }
 func (ps *PlanStateWrapper) GenExecProcNodeScript(template string) ([]byte, error) {
-	if ps == nil {
+	if ps == nil || ps.scriptGen {
 		return []byte{}, nil
 	}
-	if ps.allInstrReady {
-		return []byte{}, nil
-	}
-
 	bfile, err := ioutil.ReadFile(template)
 	if err != nil {
 		return []byte{}, err
 	}
-	maplines := ps.TranverseGenSTAP(PrintMap)
-	if len(maplines) == 0 {
-		ps.allInstrReady = true
-	}
-	replacemap := bytes.Replace(bfile, []byte("PLACEHOLDER_MAP"), maplines, -1)
+
 	codelines := ps.TranverseGenSTAP(PrintInstrument)
-	if ps.allInstrReady {
-		codelines = append(codelines, []byte("\t\tprintdln(\"|\", pid(), \"EndInstrument\")\n\t\texit()\n")...)
-	}
-	replaceall := bytes.Replace(replacemap, []byte("PLACEHOLDER_ADDR"), codelines, -1)
+
+	replaceall := bytes.Replace(bfile, []byte("PLACEHOLDER_ADDR"), codelines, -1)
 	//All instrument address is found
 
-	if len(codelines) > 0 || len(maplines) > 0 {
+	if len(codelines) > 0 {
+		ps.scriptGen = true
 		return replaceall, nil
 	}
 	return []byte{}, nil
@@ -184,6 +170,14 @@ func (ps *PlanStateWrapper) UpdateInfo(info map[string]string) {
 		switch key {
 		case "tuplecount":
 			ps.TupleCount, _ = ConvertHexToFloat64(val[2:])
+		case "startup":
+			ps.Startup, _ = ConvertHexToFloat64(val[2:])
+		case "total":
+			ps.TotalTime, _ = ConvertHexToFloat64(val[2:])
+		case "ntuples":
+			ps.NTuples, _ = ConvertHexToFloat64(val[2:])
+		case "nloops":
+			ps.NLoops, _ = ConvertHexToFloat64(val[2:])
 		case "instrument":
 			ps.Instrument, _ = strconv.ParseUint(val, 0, 64)
 		}

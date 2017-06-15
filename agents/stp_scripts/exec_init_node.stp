@@ -5,13 +5,30 @@ function parse_plan:string (plan:long) {
     return sprintf("plantype:%d,plan:%p,plan_rows:%p,leftplan:%p,rightplan:%p", user_int(plan), plan, user_long(plan+24),user_long(plan+64), user_long(plan+72))
 }
 
+function print_instrument:string (plannode:long, instr:long) {
+    return sprintf("plannode:%p,instrument:%p", plannode, instr)
+}
 
+global map_plannode_wait_hit
 probe process("/usr/local/pgsql/bin/postgres").function("ExecInitNode").call
 {
     plan = long_arg(1)
+    lpid = pid()
+    map_plannode_wait_hit[lpid,plan] = 1
 	printdln("|", pid(), ppfunc(), parse_plan(plan))
 }
 
+probe process("/usr/local/pgsql/bin/postgres").function("ExecProcNode").call
+{
+    lpid = pid()
+    planstate = long_arg(1)
+    plannode = user_long(planstate+8)
+    if (map_plannode_wait_hit[lpid, plannode] == 1) {
+		instr = user_long(planstate+24)
+        printdln("|",lpid, "GetInstrument", print_instrument(plannode, instr))
+        delete map_plannode_wait_hit[lpid, plannode]
+    }
+}
 probe process("/usr/local/pgsql/bin/postgres").function("ExecutorStart").call   
 {
     printdln("|", pid(), ppfunc())

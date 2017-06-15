@@ -33,15 +33,15 @@ func (command *Command) Process(msg []byte) error {
 	if err == nil {
 		switch command.CommandName {
 		case "RUN":
-			if len(command.Script) > 0 {
-				stp := command.GetStap()
-				command.SaveScript(stp)
-				stp.Run()
-			}
-		case "STOP":
 			stp := command.GetStap()
-			stp.Stop()
-			delete(command.RunningStp, command.Pid)
+			if len(command.Script) > 0 {
+				command.SaveScript(stp)
+			}
+			stp.Run()
+			/*	case "STOP":
+				stp := command.GetStap()
+				stp.Stop()
+				delete(command.RunningStp, command.Pid)*/
 		}
 	}
 	return err

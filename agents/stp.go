@@ -41,19 +41,11 @@ func (stp *stap) Run() {
 	go readPipe(cmdErr, "Error: ", stp.quit)
 	stp.cmd.Start()
 	stp.status = 1
-	if stp.timeout > 0 {
-		select {
-		case <-time.After(stp.timeout * time.Second):
-			stp.Stop()
-			localComm := new(communicator.AmqpComm)
-			if err := localComm.Connect("amqp://guest:guest@localhost:5672"); err != nil {
-				log.Fatalf("%s", err)
-			}
-			defer localComm.Close()
-			msg := []byte(fmt.Sprintf("%d|EndInstrument", stp.pid))
-			if err := localComm.Send("probe", msg); err != nil {
-				log.Fatalf("Cannot send EndInstrument")
-			}
+	if stp.pid != 0 {
+		err := stp.cmd.Wait()
+		close(stp.quit)
+		if err != nil {
+			log.Fatal("End monitoring with err: ", err)
 		}
 	} else {
 		var input string

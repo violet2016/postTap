@@ -1,45 +1,20 @@
 #!/usr/bin/env stap
 
 function parse_instrument:string (plannode:long, instr:long) {
-    if (instr != 0) {
-        return sprintf("plannode:%p,instrument:%p,tuplecount:%p", plannode, instr, user_long(instr+48)) 
-    }
-    return sprintf("instrument:%p", instr)
+   return sprintf("plannode:%p,tuplecount:%p,startup:%p,total:%p,ntuples:%p,nloops:%p", plannode, user_long(instr+48), user_long(instr+168),user_long(instr+176),user_long(instr+184),user_long(instr+192))
 }
-global not_printed = 1
-global map_addr_wait_hit
-global node_count = 0
+
 probe begin {
     if (target() == 0) {
         println("No PID specified.  Use -c or -x.  See man stap for more information.")
         exit()
     }
-PLACEHOLDER_MAP
-    foreach ([a] in map_addr_wait_hit)
-        node_count ++
 }
 
 probe process("/usr/local/pgsql/bin/postgres").function("ExecProcNode").call
 {
-    planstate = long_arg(1)
-    plannode = user_long(planstate+8)
-    if (not_printed == 1) {
-        not_printed = 0
-
-PLACEHOLDER_ADDR      
-    }
-
-    if (node_count > 0 && map_addr_wait_hit[plannode] == 1) {
-		instr = user_long(planstate+24)
-		printdln("|", pid(), "GetInstrument", parse_instrument(plannode,instr))
-		delete map_addr_wait_hit[plannode]
-        node_count --
-		next
-	}
-    if (node_count <= 0) {
-        printdln("|", pid(), "EndInstrument")
-        exit()
-    }
-    
+PLACEHOLDER_ADDR
+    printdln("|", pid(), "EndInstrument")
+    exit()
 }
 
