@@ -12,10 +12,11 @@ func init() {
 }
 
 func main() {
-
+	//	defer profile.Start(profile.CPUProfile).Stop()
 	go WaitForCommand()
 
 	initNode.Run()
+	defer initNode.Stop()
 }
 
 func WaitForCommand() {

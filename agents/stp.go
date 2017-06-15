@@ -17,10 +17,12 @@ type stap struct {
 	pid        int
 	timeout    time.Duration
 	cmd        *exec.Cmd
+	quit       chan bool
 }
 
 func (stp *stap) Run() {
-	arg := []string{}
+	arg := []string{"-w"}
+
 	if stp.pid != 0 {
 		arg = append(arg, "-x", strconv.Itoa(stp.pid))
 	}
@@ -29,19 +31,19 @@ func (stp *stap) Run() {
 	stp.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmdStdout, _ := stp.cmd.StdoutPipe()
 	log.Printf("Monitoring stp %s running\n", stp.scriptPath)
-	go readPipeandSend(cmdStdout)
+
+	stp.quit = make(chan bool)
+	go readPipeandSend(cmdStdout, stp.quit)
 
 	cmdErr, _ := stp.cmd.StderrPipe()
 
-	go readPipe(cmdErr, "Error: ")
+	go readPipe(cmdErr, "Error: ", stp.quit)
 	stp.cmd.Start()
+
 	if stp.timeout > 0 {
 		select {
 		case <-time.After(stp.timeout * time.Second):
-			if err := stp.cmd.Process.Kill(); err != nil {
-				log.Fatal("failed to kill: ", err)
-			}
-			log.Println("process killed as timeout reached")
+			stp.Stop()
 			localComm := new(communicator.AmqpComm)
 			if err := localComm.Connect("amqp://guest:guest@localhost:5672"); err != nil {
 				log.Fatalf("%s", err)
@@ -50,8 +52,6 @@ func (stp *stap) Run() {
 			msg := []byte(fmt.Sprintf("%d|EndInstrument", stp.pid))
 			if err := localComm.Send("probe", msg); err != nil {
 				log.Fatalf("Cannot send EndInstrument")
-			} else {
-				log.Println("Send ", string(msg))
 			}
 		}
 	} else {
@@ -61,33 +61,42 @@ func (stp *stap) Run() {
 }
 
 func (stp *stap) Stop() {
-	if stp.cmd == nil {
+	log.Println("Stop process")
+	close(stp.quit)
+	if stp.cmd == nil || stp.cmd.Process == nil {
+		log.Println("cmd does not exist")
 		return
 	}
-	if stp.cmd.ProcessState == nil || stp.cmd.ProcessState.Exited() {
-		return
-	}
+	defer stp.cmd.Wait()
 	pgid, err := syscall.Getpgid(stp.cmd.Process.Pid)
 	if err == nil {
 		syscall.Kill(-pgid, 15) // note the minus sign
+		log.Println("terminate process")
 	} else {
-		log.Fatal("Fail to stop: ", err)
+		log.Fatal("Failed to call kill process:", err)
 	}
+
 }
-func readPipe(reader io.Reader, prefix string) {
+func readPipe(reader io.Reader, prefix string, quit <-chan bool) {
 	r := bufio.NewReader(reader)
 	var outStr string
 	var line []byte
-	for true {
-		line, _, _ = r.ReadLine()
-		if line != nil {
-			outStr = string(line)
-			fmt.Println(prefix + outStr)
+	for {
+		select {
+		case <-quit:
+			return
+		default:
+			line, _, _ = r.ReadLine()
+			if line != nil {
+				outStr = string(line)
+				fmt.Println(prefix + outStr)
+			}
 		}
+
 	}
 }
 
-func readPipeandSend(reader io.Reader) {
+func readPipeandSend(reader io.Reader, quit <-chan bool) {
 	localComm := new(communicator.AmqpComm)
 	if err := localComm.Connect("amqp://guest:guest@localhost:5672"); err != nil {
 		log.Fatalf("%s", err)
@@ -95,10 +104,15 @@ func readPipeandSend(reader io.Reader) {
 	defer localComm.Close()
 	r := bufio.NewReader(reader)
 	var line []byte
-	for true {
-		line, _, _ = r.ReadLine()
-		if line != nil {
-			localComm.Send("probe", line)
+	for {
+		select {
+		case <-quit:
+			return
+		default:
+			line, _, _ = r.ReadLine()
+			if line != nil {
+				localComm.Send("probe", line)
+			}
 		}
 	}
 }
