@@ -8,7 +8,7 @@ import (
 var initNode *stap
 
 func init() {
-	initNode = &stap{scriptPath: "./stp_scripts/exec_init_node.stp", pid: 0, timeout: 0}
+	initNode = &stap{scriptPath: "./stp_scripts/exec_plan.stp", pid: 0, timeout: 0}
 }
 
 func main() {

@@ -2,21 +2,25 @@
 // A long existing stap script to get plan node when a query start
 
 function parse_planstate:string (planstate:long, left:long, right:long, plan:long) {
-    return sprintf("type:%d,leftplan:%p,rightplan:%p,plan_rows:%p,instrument:%p", user_int(planstate), left, right, user_long(plan+24), user_long(planstate+24)) 
+    return sprintf("plantype:%d,plan:%p,leftplan:%p,rightplan:%p,plan_rows:%p,instrument:%p", user_int(planstate), planstate, left, right, user_long(plan+24), user_long(planstate+24)) 
 }
 
 global map_node
-probe process("/usr/local/pgsql/bin/postgres").function("ExecutePlan").call
+
+
+probe process("/usr/local/pgsql/bin/postgres").function("ExecutorRun").call
 {
+
     lpid = pid()
-    planstate_root = long_arg(2)
+    desc = long_arg(1)
+    planstate_root = user_long(desc+88)
     
     current_index = 0
     map_node[lpid, current_index++] = planstate_root
-    while ((lpid, current_index-1) in map_node) {
+    while ([lpid, current_index-1] in map_node) {
         current_node = map_node[lpid, current_index-1]
-        left = user_long(current_node+56)
-        right = user_long(current_node+64)
+        left = user_long(current_node+48)
+        right = user_long(current_node+56)
         plan = user_long(current_node+8)
         printdln("|", lpid, "GenerateNode", parse_planstate(current_node, left, right, plan))
         delete map_node[lpid, current_index--]

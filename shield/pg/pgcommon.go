@@ -1,5 +1,6 @@
 package pg
 
+// TODO generate this file automatically?
 // PlanState enum
 const (
 	T_Invalid = iota
@@ -60,16 +61,68 @@ const (
 	T_SetOp
 	T_LockRows
 	T_Limit
+	/* these aren't subclasses of Plan: */
+	T_NestLoopParam
+	T_PlanRowMark
+	T_PlanInvalItem
+
+	/*
+	 * TAGS FOR PLAN STATE NODES (execnodes.h)
+	 *
+	 * These should correspond one-to-one with Plan node types.
+	 */
+	T_PlanState
+	T_ResultState
+	T_ProjectSetState
+	T_ModifyTableState
+	T_AppendState
+	T_MergeAppendState
+	T_RecursiveUnionState
+	T_BitmapAndState
+	T_BitmapOrState
+	T_ScanState
+	T_SeqScanState
+	T_SampleScanState
+	T_IndexScanState
+	T_IndexOnlyScanState
+	T_BitmapIndexScanState
+	T_BitmapHeapScanState
+	T_TidScanState
+	T_SubqueryScanState
+	T_FunctionScanState
+	T_TableFuncScanState
+	T_ValuesScanState
+	T_CteScanState
+	T_NamedTuplestoreScanState
+	T_WorkTableScanState
+	T_ForeignScanState
+	T_CustomScanState
+	T_JoinState
+	T_NestLoopState
+	T_MergeJoinState
+	T_HashJoinState
+	T_MaterialState
+	T_SortState
+	T_GroupState
+	T_AggState
+	T_WindowAggState
+	T_UniqueState
+	T_GatherState
+	T_GatherMergeState
+	T_HashState
+	T_SetOpState
+	T_LockRowsState
+	T_LimitState
 )
 
 // PlanStateString is the map of enum and print strings
 var planStateStringMap = map[int]string{
-	T_Result:   "Result",
-	T_SeqScan:  "Seq Scan",
-	T_Limit:    "Limit",
-	T_Agg:      "Aggregate",
-	T_NestLoop: "Nested Loop",
-	T_Material: "Materialize",
+	T_ResultState:   "Result",
+	T_SeqScanState:  "Seq Scan",
+	T_LimitState:    "Limit",
+	T_AggState:      "Aggregate",
+	T_NestLoopState: "Nested Loop",
+	T_MaterialState: "Materialize",
 }
 
 func GetNodeTypeString(typeCode int) string {

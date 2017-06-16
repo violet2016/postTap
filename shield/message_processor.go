@@ -100,20 +100,17 @@ func (qs *QueryMsgProcessor) Process(msg []byte) error {
 	switch funcName {
 	case "EndInstrument":
 		qs.Export(pid)
-	case "ExecutorStart":
+	case "GenerateNode":
 		qs.UpdateStatus(pid, start)
+		if len(fields) > 2 {
+			qs.InitPlan(pid, fields[2])
+		}
 	case "ExecutorFinish":
 		qs.UpdateStatus(pid, finish)
 	case "CreateQueryDesc":
 		qs.UpdateStatus(pid, submit)
 	case "StatementCancelHandler":
 		qs.UpdateStatus(pid, cancel)
-	case "ExecInitNode":
-		if len(fields) > 2 {
-			qs.InitPlan(pid, fields[2])
-		}
-	case "ExecProcNode":
-		return nil
 	case "GetInstrument":
 		if len(fields) > 2 {
 			qs.UpdateInstrument(pid, fields[2])

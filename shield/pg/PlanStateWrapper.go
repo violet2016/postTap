@@ -58,6 +58,8 @@ func (ps *PlanStateWrapper) GeneratePlanState(plan map[string]string) uint64 {
 			pnodeStore.rightAddr, err = strconv.ParseUint(val, 0, 64)
 		case "plan_rows":
 			ps.PlanRows, err = ConvertHexToFloat64(val[2:])
+		case "instrument":
+			ps.Instrument, err = strconv.ParseUint(val, 0, 64)
 		}
 		if err != nil {
 			log.Fatal(err)
