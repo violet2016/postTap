@@ -1,9 +1,7 @@
 package pg
 
 import (
-	"bytes"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"strconv"
 )
@@ -14,22 +12,50 @@ type NodeStore struct {
 	leftAddr  uint64
 	rightAddr uint64
 }
+
+// typedef struct BufferUsage
+// {
+// 	long		shared_blks_hit;	/* # of shared buffer hits */
+// 	long		shared_blks_read;		/* # of shared disk blocks read */
+// 	long		shared_blks_dirtied;	/* # of shared blocks dirtied */
+// 	long		shared_blks_written;	/* # of shared disk blocks written */
+// 	long		local_blks_hit; /* # of local buffer hits */
+// 	long		local_blks_read;	/* # of local disk blocks read */
+// 	long		local_blks_dirtied;		/* # of shared blocks dirtied */
+// 	long		local_blks_written;		/* # of local disk blocks written */
+// 	long		temp_blks_read; /* # of temp blocks read */
+// 	long		temp_blks_written;		/* # of temp blocks written */
+// 	instr_time	blk_read_time;	/* time spent reading */
+// 	instr_time	blk_write_time; /* time spent writing */
+// } BufferUsage;
+
 type PlanStateWrapper struct {
 	PlanNodeType       int                 `json:"type id"`
 	NodeTypeString     string              `json:"Node Type"`
 	ParentRelationship string              `json:"Parent Relationship,omitempty"`
 	Childrens          []*PlanStateWrapper `json:"Plans,omitempty"`
-	//	LeftTree           *PlanStateWrapper `json:"left"`
-	//	RightTree          *PlanStateWrapper `json:"right"`
-	Plan       *NodeStore `json:"-"`
-	Instrument uint64     `json:"-"`
-	PlanRows   float64    `json:"Plan Rows"`
-	TupleCount float64    `json:"Tuple Count"`
-	Startup    float64
-	TotalTime  float64
-	NTuples    float64 `json:"Total Tuple Count"`
-	NLoops     float64
-	scriptGen  bool
+	Plan               *NodeStore          `json:"-"`
+	Instrument         uint64              `json:"-"`
+	PlanRows           float64             `json:"Plan Rows"`
+	PlanWidth          int                 `json:"Plan Width"`
+	TupleCount         float64             `json:"Tuple Count"`
+	// Accumulated
+	Startup   float64 `json:"Startup Time,omitempty"`
+	TotalTime float64 `json:"Total Time,omitempty"`
+	NTuples   float64 `json:"Actual Rows,omitempty"`
+	NLoops    float64 `json:"Actual Loops,omitempty"`
+	// Buffer
+	SharedHitBlocks     uint64 `json:"Shared Hit Blocks,omitempty"`
+	SharedReadBlocks    uint64 `json:"Shared Read Blocks,omitempty"`
+	SharedDirtiedBlocks uint64 `json:"Shared Dirtied Blocks,omitempty"`
+	SharedWrittenBlocks uint64 `json:"Shared Written Blocks,omitempty"`
+	LocalHitBlocks      uint64 `json:"Local Hit Blocks,omitempty"`
+	LocalReadBlocks     uint64 `json:"Local Read Blocks,omitempty"`
+	LocalDirtiedBlocks  uint64 `json:"Local Dirtied Blocks,omitempty"`
+	LocalWrittenBlocks  uint64 `json:"Local Written Blocks,omitempty"`
+	TempReadBlocks      uint64 `json:"Temp Read Blocks,omitempty"`
+	TempWrittenBlocks   uint64 `json:"Temp Written Blocks,omitempty"`
+	//	IOReadTime          uint64              `json:"I/O Read Time,omitempty"`
 }
 
 type PlanFunction func(*PlanStateWrapper) interface{}
@@ -58,6 +84,8 @@ func (ps *PlanStateWrapper) GeneratePlanState(plan map[string]string) uint64 {
 			pnodeStore.rightAddr, err = strconv.ParseUint(val, 0, 64)
 		case "plan_rows":
 			ps.PlanRows, err = ConvertHexToFloat64(val[2:])
+		case "plan_width":
+			ps.PlanWidth, err = strconv.Atoi(val)
 		case "instrument":
 			ps.Instrument, err = strconv.ParseUint(val, 0, 64)
 		}
@@ -144,26 +172,6 @@ func (ps *PlanStateWrapper) TranverseGenSTAP(fn PlanFunction) []byte {
 		result = append(result, child.TranverseGenSTAP(fn)...)
 	}
 	return result
-}
-func (ps *PlanStateWrapper) GenExecProcNodeScript(template string) ([]byte, error) {
-	if ps == nil || ps.scriptGen {
-		return []byte{}, nil
-	}
-	bfile, err := ioutil.ReadFile(template)
-	if err != nil {
-		return []byte{}, err
-	}
-
-	codelines := ps.TranverseGenSTAP(PrintInstrument)
-
-	replaceall := bytes.Replace(bfile, []byte("PLACEHOLDER_ADDR"), codelines, -1)
-	//All instrument address is found
-
-	if len(codelines) > 0 {
-		ps.scriptGen = true
-		return replaceall, nil
-	}
-	return []byte{}, nil
 }
 
 // UpdateInfo update Plannode info according a string map

@@ -2,7 +2,7 @@
 // A long existing stap script to get plan node when a query start
 
 function parse_planstate:string (planstate:long, left:long, right:long, plan:long) {
-    return sprintf("plantype:%d,plan:%p,leftplan:%p,rightplan:%p,plan_rows:%p,instrument:%p", user_int(planstate), planstate, left, right, user_long(plan+24), user_long(planstate+24)) 
+    return sprintf("plantype:%d,plan:%p,leftplan:%p,rightplan:%p,plan_rows:%p,plan_width:%d,instrument:%p", user_int(planstate), planstate, left, right, user_long(plan+24), user_int(plan+32),user_long(planstate+24)) 
 }
 
 global map_node

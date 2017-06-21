@@ -1,7 +1,7 @@
 #!/usr/bin/env stap
 
 function parse_instrument:string (plannode:long, instr:long) {
-   return sprintf("plannode:%p,tuplecount:%p,startup:%p,total:%p,ntuples:%p,nloops:%p", plannode, user_long(instr+48), user_long(instr+168),user_long(instr+176),user_long(instr+184),user_long(instr+192))
+    return sprintf("plannode:%p,PLACEHOLDER_PRINTSTRING", plannode, PLACEHOLDER_MEMBER)
 }
 
 probe begin {

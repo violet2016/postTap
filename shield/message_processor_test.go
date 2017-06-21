@@ -44,7 +44,6 @@ func TestProcessQuerySleep(t *testing.T) {
 	if q.planStateRoot.Childrens[0].TupleCount != 1000 {
 		t.Error("tuplecount not right")
 	}
-	//	qs.Export(96700)
 	msgEnd := []byte("96700|EndInstrument")
 	qs.Process(msgEnd)
 }

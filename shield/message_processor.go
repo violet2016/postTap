@@ -12,7 +12,6 @@ import (
 
 type QueryMsgProcessor struct {
 	backendDB *DBWrapper
-	explainDB *DBWrapper
 	Queries   map[int]*QueryInfo
 }
 
@@ -35,7 +34,7 @@ func (qs *QueryMsgProcessor) UpdateStatus(pid int, stat int) {
 			q.StatusChanged(stat)
 		}
 	} else {
-		qs.Queries[pid] = &QueryInfo{pid: pid, statusCode: stat, status: GetStatusString(stat)}
+		qs.Queries[pid] = &QueryInfo{pid: pid, statusCode: stat, status: GetStatusString(stat), instruConfig: map[string]bool{"base": true, "accumulated": true, "buffer": false}}
 	}
 	if stat == finish || stat == cancel {
 		//qs.Queries[pid].PrintPlan()
@@ -52,8 +51,7 @@ func (qs *QueryMsgProcessor) UpdateInstrument(pid int, instru string) {
 
 func (qs *QueryMsgProcessor) Export(pid int) {
 	if qi, ok := qs.Queries[pid]; ok {
-		log.Println("Export")
-		qi.PrintPlan()
+		queryComm.Send("publish", qi.GetPlanJSON())
 	}
 }
 func (qs *QueryMsgProcessor) GetQueryDetails(pid int) error {

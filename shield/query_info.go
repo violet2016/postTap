@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"kanas/database"
 	"log"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"postTap/communicator"
 	"postTap/shield/pg"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -29,6 +32,7 @@ type QueryInfo struct {
 	username      string
 	status        string
 	statusCode    int
+	instruConfig  map[string]bool
 	planStateRoot *pg.PlanStateWrapper
 	rwlock        sync.RWMutex
 }
@@ -89,7 +93,7 @@ func (qi *QueryInfo) SendCommand(name string) error {
 	exPath := path.Dir(ex)
 	filepath := path.Join(exPath, "exec_proc_node.template")
 	if qi.statusCode == start && qi.planStateRoot != nil {
-		script, err := qi.planStateRoot.GenExecProcNodeScript(filepath)
+		script, err := qi.GenExecProcNodeScript(filepath)
 		if err == nil {
 			command.Script = script
 			msg, _ := json.Marshal(command)
@@ -101,6 +105,43 @@ func (qi *QueryInfo) SendCommand(name string) error {
 		return fmt.Errorf("Query already stopped")
 	}
 	return nil
+}
+
+// GenExecProcNodeScript generate stap script
+func (qi *QueryInfo) GenExecProcNodeScript(template string) ([]byte, error) {
+	if qi.planStateRoot == nil {
+		return []byte{}, nil
+	}
+	bfile, err := ioutil.ReadFile(template)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	codelines := qi.planStateRoot.TranverseGenSTAP(pg.PrintInstrument)
+	replaceall := bytes.Replace(bfile, []byte("PLACEHOLDER_ADDR"), codelines, -1)
+	printString, addrString := qi.GenHelperFunc()
+	replaceall = bytes.Replace(replaceall, []byte("PLACEHOLDER_PRINTSTRING"), []byte(printString), -1)
+	replaceall = bytes.Replace(replaceall, []byte("PLACEHOLDER_MEMBER"), []byte(addrString), -1)
+	if len(codelines) > 0 {
+		return replaceall, nil
+	}
+	return []byte{}, nil
+}
+
+func (qi *QueryInfo) GenHelperFunc() (string, string) {
+	printCandidates := []string{}
+	addrCandidates := []string{}
+	for k, v := range qi.instruConfig {
+		if v == true {
+			if printmember, ok := pg.InstrumentMember[k]; ok {
+				for name, offset := range printmember {
+					printCandidates = append(printCandidates, fmt.Sprintf("%s:%s", name, "%p"))
+					addrCandidates = append(addrCandidates, fmt.Sprintf("user_long(instr+%d)", offset))
+				}
+			}
+		}
+	}
+	return strings.Join(printCandidates, ","), strings.Join(addrCandidates, ",")
 }
 func (qi *QueryInfo) StartPolling() {
 	ticker := time.NewTicker(30 * time.Second)
@@ -135,15 +176,23 @@ func (qi *QueryInfo) EndPolling() {
 	commandQueue.Send("command", msg)
 
 }
+
+// PrintPlan print out the plan json to stdout
 func (qi *QueryInfo) PrintPlan() {
+	bytes := qi.GetPlanJSON()
+	fmt.Println(string(bytes))
+}
+
+// GetPlanJSON gets the json bytes for plan
+func (qi *QueryInfo) GetPlanJSON() []byte {
 	qi.rwlock.RLock()
 	defer qi.rwlock.RUnlock()
 	bytes, err := json.MarshalIndent(qi.planStateRoot, "", "  ")
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatal(err)
+
 	}
-	fmt.Println(string(bytes))
+	return bytes
 }
 
 func GetStatusString(stat int) string {

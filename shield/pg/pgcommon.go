@@ -128,3 +128,9 @@ var planStateStringMap = map[int]string{
 func GetNodeTypeString(typeCode int) string {
 	return planStateStringMap[typeCode]
 }
+
+var InstrumentMember = map[string]map[string]int{
+	"base":        map[string]int{"tuplecount": 48},
+	"accumulated": map[string]int{"startup": 168, "total": 176, "ntuples": 184, "nloops": 192},
+	"buffer":      map[string]int{},
+}
