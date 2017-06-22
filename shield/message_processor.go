@@ -10,9 +10,14 @@ import (
 	"strings"
 )
 
+type PlanMessage struct {
+	pid  int
+	body []byte
+}
 type QueryMsgProcessor struct {
 	backendDB *DBWrapper
 	Queries   map[int]*QueryInfo
+	Queryhub  *Hub
 }
 
 func MakeQueryMsgProcessor(dbname string) *QueryMsgProcessor {
@@ -51,8 +56,15 @@ func (qs *QueryMsgProcessor) UpdateInstrument(pid int, instru string) {
 
 func (qs *QueryMsgProcessor) Export(pid int) {
 	if qi, ok := qs.Queries[pid]; ok {
-		queryComm.Send("publish", qi.GetPlanJSON())
+		//queryComm.Send("publish", qi.GetPlanJSON())
+		qs.Queryhub.broadcast <- &PlanMessage{pid: pid, body: qi.GetPlanJSON()}
 	}
+}
+func (qs *QueryMsgProcessor) IsQueryExist(pid int) bool {
+	if _, ok := qs.Queries[pid]; ok {
+		return true
+	}
+	return false
 }
 func (qs *QueryMsgProcessor) GetQueryDetails(pid int) error {
 	qs.backendDB.db.CleanTokens().Select("datname, usename, query, state").From("pg_stat_activity").Where(fmt.Sprintf("pid = %d", pid)).And("coalesce(datname, '') <> ''")
