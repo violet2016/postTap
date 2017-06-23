@@ -7,8 +7,7 @@ function parse_planstate:string (planstate:long, left:long, right:long, plan:lon
 
 global map_node
 
-
-probe process("/usr/local/pgsql/bin/postgres").function("ExecutorRun").call
+probe process("PLACEHOLDER_POSTGRES").function("ExecutorRun").call
 {
 
     lpid = pid()
@@ -34,15 +33,15 @@ probe process("/usr/local/pgsql/bin/postgres").function("ExecutorRun").call
     }
 }
 
-probe process("/usr/local/pgsql/bin/postgres").function("ExecutorFinish").call 
+probe process("PLACEHOLDER_POSTGRES").function("ExecutorFinish").call 
 { 
     printdln("|", pid(), ppfunc())
 }
-probe process("/usr/local/pgsql/bin/postgres").function("CreateQueryDesc").call   
+probe process("PLACEHOLDER_POSTGRE").function("CreateQueryDesc").call   
 {
     printdln("|", pid(), ppfunc())
 }
-probe process("/usr/local/pgsql/bin/postgres").function("StatementCancelHandler").call   
+probe process("PLACEHOLDER_POSTGRES").function("StatementCancelHandler").call   
 {
     printdln("|", pid(), ppfunc())
 }

@@ -22,10 +22,12 @@ func (command *Command) SaveScript(stp *stap) {
 			log.Printf("Error occurred during script opening: %s", err)
 			return
 		}
-
 	}
 
-	ioutil.WriteFile(stp.scriptPath, command.Script, 0644)
+	err := ioutil.WriteFile(stp.scriptPath, command.Script, 0644)
+	if err != nil {
+		log.Printf("Error occurred during script saving: %s", err)
+	}
 }
 
 func (command *Command) Process(msg []byte) error {

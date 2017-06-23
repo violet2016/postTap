@@ -11,7 +11,7 @@ probe begin {
     }
 }
 
-probe process("/usr/local/pgsql/bin/postgres").function("ExecProcNode").call
+probe process("PLACEHOLDER_POSTGRES").function("ExecProcNode").call
 {
 PLACEHOLDER_ADDR
     printdln("|", pid(), "EndInstrument")
