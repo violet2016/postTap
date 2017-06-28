@@ -123,10 +123,7 @@ func (qi *QueryInfo) GenExecProcNodeScript(template string) ([]byte, error) {
 	replaceall = bytes.Replace(replaceall, []byte("PLACEHOLDER_PRINTSTRING"), []byte(printString), -1)
 	replaceall = bytes.Replace(replaceall, []byte("PLACEHOLDER_MEMBER"), []byte(addrString), -1)
 
-	if len(codelines) > 0 {
-		return replaceall, nil
-	}
-	return []byte{}, nil
+	return replaceall, nil
 }
 
 func (qi *QueryInfo) GenHelperFunc() (string, string) {
