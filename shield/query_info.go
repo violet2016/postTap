@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"postTap/common"
 	"postTap/communicator"
 	"postTap/shield/pg"
 	"strconv"
@@ -123,7 +122,7 @@ func (qi *QueryInfo) GenExecProcNodeScript(template string) ([]byte, error) {
 	printString, addrString := qi.GenHelperFunc()
 	replaceall = bytes.Replace(replaceall, []byte("PLACEHOLDER_PRINTSTRING"), []byte(printString), -1)
 	replaceall = bytes.Replace(replaceall, []byte("PLACEHOLDER_MEMBER"), []byte(addrString), -1)
-	replaceall = bytes.Replace(replaceall, []byte("PLACEHOLDER_POSTGRES"), common.Which("postgres"), -1)
+
 	if len(codelines) > 0 {
 		return replaceall, nil
 	}

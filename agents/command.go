@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"postTap/common"
 )
 
 type Command struct {
@@ -23,8 +25,8 @@ func (command *Command) SaveScript(stp *stap) {
 			return
 		}
 	}
-
-	err := ioutil.WriteFile(stp.scriptPath, command.Script, 0644)
+	replaceall := bytes.Replace(command.Script, []byte("PLACEHOLDER_POSTGRES"), common.Which("postgres"), -1)
+	err := ioutil.WriteFile(stp.scriptPath, replaceall, 0644)
 	if err != nil {
 		log.Printf("Error occurred during script saving: %s", err)
 	}

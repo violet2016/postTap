@@ -37,7 +37,7 @@ probe process("PLACEHOLDER_POSTGRES").function("ExecutorFinish").call
 { 
     printdln("|", pid(), ppfunc())
 }
-probe process("PLACEHOLDER_POSTGRE").function("CreateQueryDesc").call   
+probe process("PLACEHOLDER_POSTGRES").function("CreateQueryDesc").call   
 {
     printdln("|", pid(), ppfunc())
 }
