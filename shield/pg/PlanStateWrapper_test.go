@@ -1,8 +1,6 @@
 package pg
 
 import (
-	"os"
-	"path"
 	"testing"
 )
 
@@ -38,20 +36,5 @@ func TestConvertHexToFloat64(t *testing.T) {
 	res, _ := ConvertHexToFloat64("408f400000000000")
 	if res != 1000.0 {
 		t.Errorf("fail convert hex to float64 %f", res)
-	}
-}
-
-func TestExecProcNodeScript(t *testing.T) {
-	ps := new(PlanStateWrapper)
-	ps.InitPlanStateWrapperFromExecInitPlan("plantype:117,plan:0x1ae4630,plan_rows:0x408f400000000000,leftplan:0x1234,rightplan:0x0")
-	sub := new(PlanStateWrapper)
-	sub.InitPlanStateWrapperFromExecInitPlan("plantype:117,plan:0x1234,plan_rows:0x408f400000000000,leftplan:0x0,rightplan:0x0")
-	ps.InsertNewNode(sub)
-
-	gopath := os.Getenv("GOPATH")
-	f := path.Join(gopath, "src", "postTap/shield", "exec_proc_node.template")
-	_, err := ps.GenExecProcNodeScript(f)
-	if err != nil {
-		t.Error("error occurred:", err)
 	}
 }

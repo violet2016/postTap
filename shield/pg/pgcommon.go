@@ -117,20 +117,40 @@ const (
 
 // PlanStateString is the map of enum and print strings
 var planStateStringMap = map[int]string{
-	T_ResultState:   "Result",
-	T_SeqScanState:  "Seq Scan",
-	T_LimitState:    "Limit",
-	T_AggState:      "Aggregate",
-	T_NestLoopState: "Nested Loop",
-	T_MaterialState: "Materialize",
+	T_ResultState:          "Result",
+	T_SeqScanState:         "Seq Scan",
+	T_LimitState:           "Limit",
+	T_AggState:             "Aggregate",
+	T_SortState:            "Sort",
+	T_GroupState:           "Group by",
+	T_NestLoopState:        "Nested Loop",
+	T_MaterialState:        "Materialize",
+	T_FunctionScanState:    "Function Scan",
+	T_BitmapHeapScanState:  "Bitmap Heap Scan",
+	T_BitmapIndexScanState: "Bitmap Index Scan",
+	T_SubqueryScanState:    "Subquery Scan",
+	T_HashJoinState:        "Hash Join",
+	T_MergeJoinState:       "Merge Join",
+	T_JoinState:            "Join",
+	T_HashState:            "Hash",
+	T_UniqueState:          "Unique",
+	T_CteScanState:         "CTE Scan",
+	T_WindowAggState:       "WindowAgg",
+	T_GatherState:          "Gather",
+	T_GatherMergeState:     "Gather Merge",
 }
 
 func GetNodeTypeString(typeCode int) string {
 	return planStateStringMap[typeCode]
 }
 
-var InstrumentMember = map[string]map[string]int{
-	"base":        map[string]int{"tuplecount": 48},
-	"accumulated": map[string]int{"startup": 168, "total": 176, "ntuples": 184, "nloops": 192},
-	"buffer":      map[string]int{},
+type InstrAttr struct {
+	MemberType string
+	Offset     int
+}
+
+var InstrumentMember = map[string]map[string]InstrAttr{
+	"base":        map[string]InstrAttr{"tuplecount": InstrAttr{"long", 48}, "running": InstrAttr{"int8", 2}},
+	"accumulated": map[string]InstrAttr{"startup": InstrAttr{"long", 168}, "total": InstrAttr{"long", 176}, "ntuples": InstrAttr{"long", 184}, "nloops": InstrAttr{"long", 192}},
+	"buffer":      map[string]InstrAttr{},
 }

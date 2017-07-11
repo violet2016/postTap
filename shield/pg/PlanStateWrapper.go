@@ -39,6 +39,9 @@ type PlanStateWrapper struct {
 	PlanRows           float64             `json:"Plan Rows"`
 	PlanWidth          int                 `json:"Plan Width"`
 	TupleCount         float64             `json:"Tuple Count"`
+	Running            bool                `json:"Running"`
+	StartupCost        float64             `json:"StartupCost"`
+	TotalCost          float64             `json:"TotalCost"`
 	// Accumulated
 	Startup   float64 `json:"Startup Time,omitempty"`
 	TotalTime float64 `json:"Total Time,omitempty"`
@@ -84,6 +87,10 @@ func (ps *PlanStateWrapper) GeneratePlanState(plan map[string]string) uint64 {
 			pnodeStore.rightAddr, err = strconv.ParseUint(val, 0, 64)
 		case "plan_rows":
 			ps.PlanRows, err = ConvertHexToFloat64(val[2:])
+		case "startup_cost":
+			ps.StartupCost, err = ConvertHexToFloat64(val[2:])
+		case "total_cost":
+			ps.TotalCost, err = ConvertHexToFloat64(val[2:])
 		case "plan_width":
 			ps.PlanWidth, err = strconv.Atoi(val)
 		case "instrument":
@@ -180,6 +187,8 @@ func (ps *PlanStateWrapper) UpdateInfo(info map[string]string) {
 		switch key {
 		case "tuplecount":
 			ps.TupleCount, _ = ConvertHexToFloat64(val[2:])
+		case "running":
+			ps.Running, _ = strconv.ParseBool(val[2:])
 		case "startup":
 			ps.Startup, _ = ConvertHexToFloat64(val[2:])
 		case "total":

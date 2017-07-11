@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -10,14 +11,14 @@ import (
 	"strings"
 )
 
-type PlanMessage struct {
-	pid  int
-	body []byte
-}
 type QueryMsgProcessor struct {
 	backendDB *DBWrapper
 	Queries   map[int]*QueryInfo
 	Queryhub  *Hub
+}
+type PlanMessage struct {
+	MessageType string
+	Query       *QueryInfo
 }
 
 func MakeQueryMsgProcessor(dbname string) *QueryMsgProcessor {
@@ -34,12 +35,12 @@ func (qs *QueryMsgProcessor) UpdateStatus(pid int, stat int) {
 	if q, ok := qs.Queries[pid]; ok {
 		if q.statusCode < stat {
 			q.statusCode = stat
-			q.status = GetStatusString(stat)
-			log.Println("query status:", q.status)
+			q.Status = GetStatusString(stat)
+			log.Println("query status:", q.Status)
 			q.StatusChanged(stat)
 		}
 	} else {
-		qs.Queries[pid] = &QueryInfo{pid: pid, statusCode: stat, status: GetStatusString(stat), instruConfig: map[string]bool{"base": true, "accumulated": true, "buffer": false}}
+		qs.Queries[pid] = &QueryInfo{Pid: pid, statusCode: stat, Status: GetStatusString(stat), instruConfig: map[string]bool{"base": true, "accumulated": true, "buffer": false}}
 	}
 	if stat == finish || stat == cancel {
 		//qs.Queries[pid].PrintPlan()
@@ -57,7 +58,11 @@ func (qs *QueryMsgProcessor) UpdateInstrument(pid int, instru string) {
 func (qs *QueryMsgProcessor) Export(pid int) {
 	if qi, ok := qs.Queries[pid]; ok {
 		//queryComm.Send("publish", qi.GetPlanJSON())
-		qs.Queryhub.broadcast <- &PlanMessage{pid: pid, body: qi.GetPlanJSON()}
+
+		result, err := json.Marshal(PlanMessage{"query", qi})
+		if err == nil {
+			qs.Queryhub.broadcast <- result
+		}
 	}
 }
 func (qs *QueryMsgProcessor) IsQueryExist(pid int) bool {
@@ -74,10 +79,10 @@ func (qs *QueryMsgProcessor) GetQueryDetails(pid int) error {
 		return err
 	}
 	if len(rows) > 0 {
-		query.dbname = rows[0]["datname"].(string)
-		query.username = rows[0]["usename"].(string)
-		query.queryText = rows[0]["query"].(string)
-		query.status = rows[0]["state"].(string)
+		query.Dbname = rows[0]["datname"].(string)
+		query.Username = rows[0]["usename"].(string)
+		query.QueryText = rows[0]["query"].(string)
+		query.Status = rows[0]["state"].(string)
 		qs.Queries[pid] = query
 	} else {
 		return fmt.Errorf("Query not found")

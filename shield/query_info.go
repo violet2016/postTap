@@ -26,24 +26,24 @@ const (
 )
 
 type QueryInfo struct {
-	pid           int
-	queryText     string
-	dbname        string
-	username      string
-	status        string
+	Pid           int    `json:"id"`
+	QueryText     string `json:"query_text,omitempty"`
+	Dbname        string `json:"db"`
+	Username      string `json:"username"`
+	Status        string `json:"status"`
 	statusCode    int
 	instruConfig  map[string]bool
-	planStateRoot *pg.PlanStateWrapper
+	PlanStateRoot *pg.PlanStateWrapper `json:"plan,omitempty"`
 	rwlock        sync.RWMutex
 }
 
 func (qi *QueryInfo) UpdatePlanStateTree(node *pg.PlanStateWrapper) {
-	if qi.planStateRoot != nil {
+	if qi.PlanStateRoot != nil {
 		qi.rwlock.Lock()
 		defer qi.rwlock.Unlock()
-		qi.planStateRoot.InsertNewNode(node)
+		qi.PlanStateRoot.InsertNewNode(node)
 	} else {
-		qi.planStateRoot = node
+		qi.PlanStateRoot = node
 	}
 }
 
@@ -56,7 +56,7 @@ func (qi *QueryInfo) UpdateNode(msg string) {
 		if err != nil {
 			return
 		}
-		qs := qi.planStateRoot.FindNodeByAddr(addr)
+		qs := qi.PlanStateRoot.FindNodeByAddr(addr)
 		if qs == nil {
 			return
 		}
@@ -77,7 +77,7 @@ func (qi *QueryInfo) StatusChanged(stat int) {
 func (qi *QueryInfo) SendCommand(name string) error {
 	command := new(communicator.CommandMsg)
 	command.CommandName = "RUN"
-	command.Pid = qi.pid
+	command.Pid = qi.Pid
 	commandQueue := new(communicator.AmqpComm)
 	if err := commandQueue.Connect("amqp://guest:guest@localhost:5672"); err != nil {
 		log.Fatalf("%s", err)
@@ -92,7 +92,7 @@ func (qi *QueryInfo) SendCommand(name string) error {
 	}
 	exPath := path.Dir(ex)
 	filepath := path.Join(exPath, "exec_proc_node.template")
-	if qi.statusCode == start && qi.planStateRoot != nil {
+	if qi.statusCode == start && qi.PlanStateRoot != nil {
 		script, err := qi.GenExecProcNodeScript(filepath)
 		if err == nil {
 			command.Script = script
@@ -109,7 +109,7 @@ func (qi *QueryInfo) SendCommand(name string) error {
 
 // GenExecProcNodeScript generate stap script
 func (qi *QueryInfo) GenExecProcNodeScript(template string) ([]byte, error) {
-	if qi.planStateRoot == nil {
+	if qi.PlanStateRoot == nil {
 		return []byte{}, nil
 	}
 	bfile, err := ioutil.ReadFile(template)
@@ -117,7 +117,7 @@ func (qi *QueryInfo) GenExecProcNodeScript(template string) ([]byte, error) {
 		return []byte{}, err
 	}
 
-	codelines := qi.planStateRoot.TranverseGenSTAP(pg.PrintInstrument)
+	codelines := qi.PlanStateRoot.TranverseGenSTAP(pg.PrintInstrument)
 	replaceall := bytes.Replace(bfile, []byte("PLACEHOLDER_ADDR"), codelines, -1)
 	printString, addrString := qi.GenHelperFunc()
 	replaceall = bytes.Replace(replaceall, []byte("PLACEHOLDER_PRINTSTRING"), []byte(printString), -1)
@@ -132,15 +132,16 @@ func (qi *QueryInfo) GenHelperFunc() (string, string) {
 	for k, v := range qi.instruConfig {
 		if v == true {
 			if printmember, ok := pg.InstrumentMember[k]; ok {
-				for name, offset := range printmember {
+				for name, attr := range printmember {
 					printCandidates = append(printCandidates, fmt.Sprintf("%s:%s", name, "%p"))
-					addrCandidates = append(addrCandidates, fmt.Sprintf("user_long(instr+%d)", offset))
+					addrCandidates = append(addrCandidates, fmt.Sprintf("user_%s(instr+%d)", attr.MemberType, attr.Offset))
 				}
 			}
 		}
 	}
 	return strings.Join(printCandidates, ","), strings.Join(addrCandidates, ",")
 }
+
 func (qi *QueryInfo) StartPolling() {
 	ticker := time.NewTicker(30 * time.Second)
 	quitpolling := make(chan struct{})
@@ -162,7 +163,7 @@ func (qi *QueryInfo) StartPolling() {
 func (qi *QueryInfo) EndPolling() {
 	command := new(communicator.CommandMsg)
 	command.CommandName = "STOP"
-	command.Pid = qi.pid
+	command.Pid = qi.Pid
 	commandQueue := new(communicator.AmqpComm)
 	if err := commandQueue.Connect("amqp://guest:guest@localhost:5672"); err != nil {
 		log.Fatalf("%s", err)
@@ -185,7 +186,7 @@ func (qi *QueryInfo) PrintPlan() {
 func (qi *QueryInfo) GetPlanJSON() []byte {
 	qi.rwlock.RLock()
 	defer qi.rwlock.RUnlock()
-	bytes, err := json.MarshalIndent(qi.planStateRoot, "", "  ")
+	bytes, err := json.Marshal(qi)
 	if err != nil {
 		log.Fatal(err)
 

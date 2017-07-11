@@ -21,7 +21,7 @@ func init() {
 
 func main() {
 	flag.Parse()
-	go hub.run()
+	go hub.Run()
 	go runServer()
 
 	if err := queryComm.Connect("amqp://guest:guest@localhost:5672"); err != nil {
